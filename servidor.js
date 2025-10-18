@@ -4,16 +4,17 @@ const express = require('express');
 const cors = require('cors');
 const { createClient } = require('@supabase/supabase-js');
 const { Resend } = require('resend');
+const path = require('path');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
 
-// === CORS: permite tu dominio de Netlify + localhost ===
+// === CORS: dominios sin espacios ni barras ===
 app.use(cors({
   origin: [
     'http://localhost:3000',
-    'https://juegaganayviaja-wq.github.io/suerteyviaja/', // 👈 ajusta si usas otro
-    'https://suerteyviaja.netlify.app'
+    'https://viajaydisfruta.onrender.com', // ✅ sin barra ni espacios
+    'https://suerteyviaja.netlify.app'    // ✅ sin barra ni espacios
   ]
 }));
 
@@ -22,11 +23,20 @@ app.use(express.json({ limit: '10mb' }));
 // === SUPABASE (usa SERVICE_ROLE_KEY para escritura) ===
 const supabase = createClient(
   process.env.SUPABASE_URL,
-  process.env.SUPABASE_SERVICE_ROLE_KEY
+  process.env.SUPABASE_SERVICE_ROLE_KEY // ⚠️ Asegúrate de configurar esta variable en Render
 );
 
 // === RESEND ===
 const resend = new Resend(process.env.RESEND_API_KEY);
+
+// === RUTA RAÍZ (¡ESPECIALMENTE PARA RENDER!) ===
+app.get('/', (req, res) => {
+  res.json({ 
+    message: 'Backend de Gana y Viaja activo ✅',
+    health: '/api/health',
+    docs: 'Usa /api/health para verificar estado'
+  });
+});
 
 // === RUTA DE SALUD ===
 app.get('/api/health', (req, res) => {
@@ -200,7 +210,14 @@ app.post('/api/participacion/:id/rechazar', async (req, res) => {
   }
 });
 
+// === MANEJO DE ERRORES GLOBAL ===
+app.use((err, req, res, next) => {
+  console.error('Error no capturado:', err);
+  res.status(500).json({ error: 'Error interno del servidor.' });
+});
+
 // === INICIAR SERVIDOR ===
-app.listen(PORT, () => {
-  console.log(`🚀 Backend corriendo en http://localhost:${PORT}`);
+app.listen(PORT, '0.0.0.0', () => {
+  console.log(`🚀 Backend corriendo en puerto ${PORT}`);
+  console.log(`🔗 URL pública: https://viajaydisfruta.onrender.com`);
 });
