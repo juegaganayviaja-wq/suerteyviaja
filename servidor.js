@@ -9,33 +9,32 @@ const path = require('path');
 const app = express();
 const PORT = process.env.PORT || 3000;
 
-// === CORS: dominios sin espacios ni barras ===
+// === CORS: dominios SIN espacios ni barras ===
 app.use(cors({
   origin: [
     'http://localhost:3000',
-    'https://viajaydisfruta.onrender.com', // ✅ sin barra ni espacios
-    'https://suerteyviaja.netlify.app'    // ✅ sin barra ni espacios
+    'https://viajaydisfruta.onrender.com',   // ✅ sin espacios
+    'https://suerteyviaja.netlify.app'       // ✅ sin espacios
   ]
 }));
 
 app.use(express.json({ limit: '10mb' }));
 
-// === SUPABASE (usa SERVICE_ROLE_KEY para escritura) ===
+// === SERVE ARCHIVOS ESTÁTICOS (frontend) ===
+app.use(express.static(path.join(__dirname, 'public')));
+
+// === SUPABASE ===
 const supabase = createClient(
   process.env.SUPABASE_URL,
-  process.env.SUPABASE_SERVICE_ROLE_KEY // ⚠️ Asegúrate de configurar esta variable en Render
+  process.env.SUPABASE_SERVICE_ROLE_KEY
 );
 
 // === RESEND ===
 const resend = new Resend(process.env.RESEND_API_KEY);
 
-// === RUTA RAÍZ (¡ESPECIALMENTE PARA RENDER!) ===
+// === RUTA RAÍZ: sirve index.html ===
 app.get('/', (req, res) => {
-  res.json({ 
-    message: 'Backend de Gana y Viaja activo ✅',
-    health: '/api/health',
-    docs: 'Usa /api/health para verificar estado'
-  });
+  res.sendFile(path.join(__dirname, 'public', 'index.html'));
 });
 
 // === RUTA DE SALUD ===
@@ -68,11 +67,11 @@ app.get('/api/ocupados', async (req, res) => {
   }
 });
 
-// === FUNCIÓN PARA ENVIAR CORREO CON RESEND ===
+// === FUNCIÓN PARA ENVIAR CORREO ===
 async function enviarCorreo(to, subject, html) {
   try {
     await resend.emails.send({
-      from: 'Gana y Viaja <juegaganayviaja@gmail.com>', // ← debe estar verificado en Resend
+      from: 'Gana y Viaja <juegaganayviaja@gmail.com>',
       to,
       subject,
       html
@@ -92,7 +91,6 @@ app.post('/api/reservar', async (req, res) => {
   }
 
   try {
-    // Verificar duplicados
     const { data: todas, error: errCheck } = await supabase
       .from('participaciones')
       .select('numeros');
@@ -104,14 +102,12 @@ app.post('/api/reservar', async (req, res) => {
       return res.status(409).json({ error: `Números ya usados: ${repetidos.join(', ')}` });
     }
 
-    // Guardar en Supabase
     const { data, error } = await supabase
       .from('participaciones')
       .insert([{ nombre, telefono, correo, numeros, referencia, fecha, estado: 'pendiente', timestamp }])
       .select();
     if (error) throw error;
 
-    // ✉️ Enviar correo de recepción
     await enviarCorreo(
       correo,
       '📄 Comprobante recibido - Pendiente de validación',
@@ -220,14 +216,4 @@ app.use((err, req, res, next) => {
 app.listen(PORT, '0.0.0.0', () => {
   console.log(`🚀 Backend corriendo en puerto ${PORT}`);
   console.log(`🔗 URL pública: https://viajaydisfruta.onrender.com`);
-
-
-  // Sirve archivos estáticos desde la carpeta 'public'
-app.use(express.static(path.join(__dirname, 'public')));
-
-// Ruta raíz: sirve index.html
-app.get('/', (req, res) => {
-  res.sendFile(path.join(__dirname, 'public', 'index.html'));
-});
-
 });
