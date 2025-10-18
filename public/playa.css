@@ -1,0 +1,327 @@
+body {
+  margin: 0;
+  font-family: Arial, sans-serif;
+  background-color: #f5f5f5;
+}
+
+.container {
+  max-width: 1000px;
+  margin: 0 auto;
+  padding: 20px;
+  background-color: white;
+  border-radius: 10px;
+  box-shadow: 0 0 10px rgba(0,0,0,0.1);
+}
+
+#cintilloTitulo {
+  background-color: #1976d2;
+  color: white;
+  padding: 10px;
+  text-align: center;
+  font-weight: bold;
+  border-radius: 5px;
+}
+
+#bannerPromocional {
+  background-color: #e3f2fd;
+  padding: 15px;
+  text-align: center;
+  margin: 10px 0;
+  border-radius: 5px;
+}
+
+#contenedorPrincipal {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 20px;
+}
+
+/* === CARRUSEL === */
+
+#carruselContainer {
+  position: relative;
+  width: 100%;
+  max-width: 800px; /* Ancho máximo del carrusel */
+  margin: 20px auto; /* Centrar y añadir margen */
+  overflow: hidden; /* Ocultar imágenes que no están en vista */
+  border-radius: 10px; /* Bordes redondeados */
+  box-shadow: 0 4px 10px rgba(0, 0, 0, 0.1); /* Sombra sutil */
+}
+
+#carrusel {
+  display: flex; /* Mostrar imágenes en fila */
+  width: 100%; /* Ancho del contenedor */
+  height: 400px; /* Altura fija para todas las imágenes */
+}
+
+#carrusel img {
+  min-width: 100%; /* Cada imagen ocupa el 100% del contenedor */
+  width: 100%;
+  height: 100%; /* Forzar altura */
+  object-fit: cover; /* Recortar la imagen para que llene el espacio, manteniendo la proporción */
+  display: block;
+  flex-shrink: 0; /* Evitar que las imágenes se encojan */
+}
+
+/* Botones de navegación */
+#btnPrev,
+#btnNext {
+  position: absolute;
+  top: 50%;
+  transform: translateY(-50%);
+  background-color: rgba(0, 0, 0, 0.5); /* Fondo semitransparente */
+  color: white;
+  border: none;
+  font-size: 24px;
+  padding: 15px 10px; /* Aumentar el área de clic */
+  cursor: pointer;
+  z-index: 2; /* Asegurar que estén por encima de las imágenes */
+  transition: background-color 0.3s ease; /* Transición suave */
+  border-radius: 0 5px 5px 0; /* Bordes redondeados para el botón Prev */
+}
+
+#btnPrev {
+  left: 0;
+  border-radius: 0 5px 5px 0; /* Redondear solo el lado derecho */
+}
+
+#btnNext {
+  right: 0;
+  border-radius: 5px 0 0 5px; /* Redondear solo el lado izquierdo */
+}
+
+#btnPrev:hover,
+#btnNext:hover {
+  background-color: rgba(0, 0, 0, 0.8); /* Oscurecer al pasar el mouse */
+}
+.modulo-seccion {
+  display: none;
+}
+
+.modulo-seccion.activa {
+  display: block;
+}
+
+.form-group {
+  margin-bottom: 15px;
+}
+
+.form-group label {
+  display: block;
+  margin-bottom: 5px;
+  font-weight: bold;
+}
+
+.form-group input {
+  width: 100%;
+  padding: 8px;
+  border: 1px solid #ccc;
+  border-radius: 4px;
+  box-sizing: border-box;
+}
+
+.btn-paso {
+  width: 100%;
+  padding: 12px;
+  background-color: #1976d2;
+  color: white;
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 16px;
+  margin-top: 10px;
+  transition: background-color 0.3s ease;
+}
+
+.btn-paso:hover {
+  background-color: #1565c0;
+}
+
+.btn-paso:active {
+  background-color: #0d47a1;
+}
+
+#btnIniciar {
+  display: block;
+  margin: 30px auto;
+  padding: 20px 40px;
+  background-color: #4caf50;
+  color: white;
+  border: none;
+  border-radius: 8px;
+  font-size: 20px;
+  font-weight: bold;
+  cursor: pointer;
+  box-shadow: 0 4px 8px rgba(0,0,0,0.1);
+  transition: transform 0.2s ease, box-shadow 0.2s ease;
+}
+
+#btnIniciar:hover {
+  transform: scale(1.05);
+  box-shadow: 0 6px 12px rgba(0,0,0,0.15);
+}
+
+#btnIniciar:active {
+  transform: scale(0.98);
+}
+
+/* Modal de selección */
+#modal {
+  display: none;
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background: rgba(0,0,0,0.7);
+  z-index: 1000;
+  justify-content: center;
+  align-items: center;
+}
+
+#modalContent {
+  background: white;
+  padding: 20px;
+  border-radius: 8px;
+  width: 90%;
+  max-width: 600px;
+  max-height: 80vh;
+  overflow-y: auto;
+  box-shadow: 0 4px 20px rgba(0,0,0,0.2);
+}
+
+#modalContent h3 {
+  margin-top: 15px;
+  font-size: 16px;
+  color: #333;
+}
+
+.numero-celda {
+  display: inline-block;
+  width: 50px;
+  height: 50px;
+  line-height: 50px;
+  text-align: center;
+  border: 1px solid #ccc;
+  margin: 3px;
+  cursor: pointer;
+  background-color: #f0f0f0;
+  border-radius: 4px;
+  font-size: 14px;
+}
+
+.numero-celda.seleccionado {
+  background-color: #1976d2;
+  color: white;
+}
+
+.grid-numeros {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(50px, 1fr));
+  gap: 5px;
+  margin-top: 10px;
+}
+
+/* Botones en el modal */
+#btnConfirmar, #btnCambiar, #btnCerrar {
+  margin: 5px;
+  padding: 8px 15px;
+  border-radius: 4px;
+  font-size: 14px;
+  cursor: pointer;
+}
+
+#btnConfirmar {
+  background-color: #e53935;
+  color: white;
+}
+
+#btnCambiar {
+  background-color: #66bb6a;
+  color: white;
+}
+
+#btnCerrar {
+  background-color: #90a4ae;
+  color: white;
+}
+
+/* Estilos adicionales para el módulo de pago */
+#pasoPago .form-group {
+  margin-bottom: 15px;
+}
+
+#pasoPago .form-group label {
+  display: block;
+  margin-bottom: 5px;
+  font-weight: bold;
+  font-size: 14px;
+}
+
+#pasoPago .form-group input {
+  width: 100%;
+  padding: 8px;
+  border: 1px solid #ccc;
+  border-radius: 4px;
+  box-sizing: border-box;
+  font-size: 14px;
+}
+
+/* Estilos para el contenedor de pago */
+#contenedorPago {
+  background: white;
+  padding: 20px;
+  border-radius: 10px;
+  box-shadow: 0 4px 20px rgba(0,0,0,0.2);
+  max-width: 800px;
+  width: 90%;
+  margin: 0 auto;
+  display: flex;
+  flex-direction: column;
+}
+
+/* Responsive */
+@media (max-width: 768px) {
+  .container {
+    padding: 10px;
+  }
+
+  #cintilloTitulo, #bannerPromocional {
+    font-size: 14px;
+  }
+
+  #btnIniciar {
+    font-size: 16px;
+    padding: 10px 15px;
+  }
+
+  #contenedorPrincipal {
+    flex-direction: column;
+  }
+
+  #carruselContainer {
+    width: 100%;
+  }
+
+  #moduloPagoCompleto {
+    width: 100%;
+    margin-top: 20px;
+  }
+
+  .form-group label {
+    font-size: 14px;
+  }
+
+  .form-group input {
+    font-size: 14px;
+  }
+
+  .btn-paso {
+    font-size: 16px;
+    padding: 10px 20px;
+  }
+
+  #carrusel img {
+    height: 200px;
+  }
+}
