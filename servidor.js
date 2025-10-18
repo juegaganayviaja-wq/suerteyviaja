@@ -12,8 +12,8 @@ const PORT = process.env.PORT || 3000;
 app.use(cors({
   origin: [
     'http://localhost:3000',
-    'viajaydisfruta.vercel.app', // 👈 ajusta si usas otro
-    'https://viajaydisfruta.netlify.app'
+    'https://juegaganayviaja-wq.github.io/suerteyviaja/', // 👈 ajusta si usas otro
+    'https://suerteyviaja.netlify.app'
   ]
 }));
 
