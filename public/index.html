@@ -1,0 +1,124 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Gana y Viaja</title>
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+  <div class="container">
+    <header>
+      <h1>🎉 Gana y Viaja</h1>
+      <p>Elige 2 o más números y participa en el sorteo</p>
+    </header>
+
+    <form id="participacionForm">
+      <div class="form-group">
+        <label for="nombre">Nombre completo *</label>
+        <input type="text" id="nombre" required />
+      </div>
+
+      <div class="form-group">
+        <label for="telefono">Teléfono *</label>
+        <input type="tel" id="telefono" required />
+      </div>
+
+      <div class="form-group">
+        <label for="correo">Correo electrónico *</label>
+        <input type="email" id="correo" required />
+      </div>
+
+      <div class="form-group">
+        <label for="numeros">Números (mínimo 2) *</label>
+        <input type="text" id="numeros" placeholder="Ej: 5, 12, 23" required />
+        <small>Separados por comas</small>
+      </div>
+
+      <div class="form-group">
+        <label for="referencia">Referencia de pago *</label>
+        <input type="text" id="referencia" required />
+      </div>
+
+      <div class="form-group">
+        <label for="fecha">Fecha de pago *</label>
+        <input type="date" id="fecha" required />
+      </div>
+
+      <button type="submit">Enviar participación</button>
+    </form>
+
+    <div id="mensaje"></div>
+  </div>
+
+  <script>
+    document.getElementById('participacionForm').addEventListener('submit', async (e) => {
+      e.preventDefault();
+      
+      // Obtener valores
+      const nombre = document.getElementById('nombre').value.trim();
+      const telefono = document.getElementById('telefono').value.trim();
+      const correo = document.getElementById('correo').value.trim();
+      const numerosStr = document.getElementById('numeros').value.trim();
+      const referencia = document.getElementById('referencia').value.trim();
+      const fecha = document.getElementById('fecha').value;
+
+      // Validar números
+      const numeros = numerosStr.split(',').map(n => n.trim()).filter(n => n);
+      if (numeros.length < 2) {
+        mostrarMensaje('⚠️ Debes ingresar al menos 2 números.', 'error');
+        return;
+      }
+
+      // Validar que sean números
+      if (!numeros.every(n => /^\d+$/.test(n))) {
+        mostrarMensaje('⚠️ Los números deben ser enteros positivos.', 'error');
+        return;
+      }
+
+      // Preparar datos
+      const datos = {
+        nombre,
+        telefono,
+        correo,
+        numeros: numeros.map(Number),
+        referencia,
+        fecha,
+        timestamp: Date.now()
+      };
+
+      try {
+        const respuesta = await fetch('https://viajaydisfruta.onrender.com/api/reservar', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(datos)
+        });
+
+        const resultado = await respuesta.json();
+
+        if (respuesta.ok) {
+          mostrarMensaje('✅ ¡Participación registrada! Revisa tu correo.', 'exito');
+          document.getElementById('participacionForm').reset();
+        } else {
+          mostrarMensaje(`❌ Error: ${resultado.error || 'No se pudo registrar'}`, 'error');
+        }
+      } catch (error) {
+        console.error('Error:', error);
+        mostrarMensaje('❌ Error de conexión. Intenta más tarde.', 'error');
+      }
+    });
+
+    function mostrarMensaje(texto, tipo) {
+      const mensaje = document.getElementById('mensaje');
+      mensaje.textContent = texto;
+      mensaje.className = tipo;
+      mensaje.style.display = 'block';
+      
+      // Ocultar después de 5 segundos
+      setTimeout(() => {
+        mensaje.style.display = 'none';
+      }, 5000);
+    }
+  </script>
+</body>
+</html>
