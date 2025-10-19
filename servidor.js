@@ -88,6 +88,19 @@ async function enviarCorreo(to, subject, html) {
 }
 
 // === REGISTRAR PARTICIPACIÓN ===
+
+
+// Verificar referencia duplicada
+const { data: existente, error: refError } = await supabase
+  .from('participaciones')
+  .select('referencia')
+  .eq('referencia', referencia)
+  .single();
+
+if (refError?.code !== 'PGRST116') { // PGRST116 = "no rows returned"
+  return res.status(409).json({ error: 'La referencia de pago ya ha sido utilizada.' });
+}
+
 app.post('/api/reservar', async (req, res) => {
   const { nombre, telefono, correo, numeros, referencia, fecha, timestamp } = req.body;
   if (!nombre || !telefono || !correo || !referencia || !fecha || !timestamp || !Array.isArray(numeros) || numeros.length < 2) {
@@ -228,6 +241,22 @@ app.get('/api/participaciones', async (req, res) => {
   } catch (err) {
     console.error('❌ Error al obtener participaciones:', err);
     res.status(500).json({ error: 'Error al obtener participaciones.' });
+  }
+});
+
+
+
+// === LOGIN DE ADMINISTRADOR ===
+app.post('/api/admin/login', async (req, res) => {
+  const { password } = req.body;
+  const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || 'admin123';
+  
+  if (password === ADMIN_PASSWORD) {
+    // Genera un token de sesión simple
+    const token = 'admin-session-' + Date.now();
+    res.json({ success: true, token });
+  } else {
+    res.status(401).json({ error: 'Contraseña incorrecta' });
   }
 });
 

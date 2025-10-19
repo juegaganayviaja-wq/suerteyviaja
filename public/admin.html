@@ -185,6 +185,13 @@
 </div>
 
 <script>
+
+// Verificar si el usuario está autenticado
+if (!sessionStorage.getItem('adminToken')) {
+  alert('Acceso denegado. Inicia sesión primero.');
+  window.location.href = 'index.html';
+}
+
 // === CONFIGURACIÓN ===
 // URL base de tu backend (ajusta si usas otro puerto o dominio)
 const API_BASE = 'https://viajaydisfruta.onrender.com';
