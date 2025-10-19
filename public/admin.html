@@ -109,21 +109,21 @@
       color: green;
       font-weight: bold;
     }
-    .estado-pendiente {
-      color: orange;
-      font-weight: bold;
-    }
-    .estado-confirmado {
-      color: green;
-      font-weight: bold;
-    }
-    .estado-rechazado {
-      color: red;
-      font-weight: bold;
-    }
+    .estado-pendiente { color: orange; font-weight: bold; }
+    .estado-confirmado { color: green; font-weight: bold; }
+    .estado-rechazado { color: red; font-weight: bold; }
   </style>
 </head>
 <body>
+
+<!-- 🔒 Protección de acceso -->
+<script>
+if (!sessionStorage.getItem('adminToken')) {
+  alert('Acceso denegado. Inicia sesión primero.');
+  window.location.href = 'index.html';
+}
+</script>
+
 <div class="container">
   <h1>Panel de Administrador - Gana y Viaja</h1>
   <div class="search-box">
@@ -143,9 +143,7 @@
         <th>Acciones</th>
       </tr>
     </thead>
-    <tbody>
-      <!-- Los datos se cargarán aquí -->
-    </tbody>
+    <tbody></tbody>
   </table>
 </div>
 
@@ -162,7 +160,6 @@
 </div>
 
 <script>
-// === CONFIGURACIÓN ===
 const API_BASE = 'https://viajaydisfruta.onrender.com';
 
 // === OBTENER PARTICIPACIONES DESDE TU BACKEND ===
@@ -181,9 +178,9 @@ async function obtenerParticipacionesDesdeBackend() {
   }
 }
 
-// === FUNCIONES ACTUALIZADAS ===
+// === FUNCIONES DE ACCIÓN ===
 async function validarParticipacion(id) {
-  if (!confirm('¿Estás seguro de que deseas VALIDAR esta participación?')) return;
+  if (!confirm('¿Validar esta participación?')) return;
   try {
     const response = await fetch(`${API_BASE}/api/participacion/${id}/validar`, {
       method: 'POST',
@@ -195,16 +192,15 @@ async function validarParticipacion(id) {
       const participaciones = await obtenerParticipacionesDesdeBackend();
       renderizarTabla(participaciones);
     } else {
-      alert(`❌ Error: ${data.error}`);
+      alert(`❌ ${data.error}`);
     }
   } catch (error) {
-    console.error('Error al validar:', error);
-    alert('❌ Error de conexión con el servidor.');
+    alert('❌ Error de conexión.');
   }
 }
 
 async function rechazarParticipacion(id) {
-  if (!confirm('¿Estás seguro de que deseas RECHAZAR esta participación?')) return;
+  if (!confirm('¿Rechazar esta participación?')) return;
   try {
     const response = await fetch(`${API_BASE}/api/participacion/${id}/rechazar`, {
       method: 'POST',
@@ -216,14 +212,14 @@ async function rechazarParticipacion(id) {
       const participaciones = await obtenerParticipacionesDesdeBackend();
       renderizarTabla(participaciones);
     } else {
-      alert(`❌ Error: ${data.error}`);
+      alert(`❌ ${data.error}`);
     }
   } catch (error) {
-    console.error('Error al rechazar:', error);
-    alert('❌ Error de conexión con el servidor.');
+    alert('❌ Error de conexión.');
   }
 }
 
+// === RENDERIZAR TABLA ===
 function renderizarTabla(participaciones) {
   const tbody = document.querySelector('#participacionesTable tbody');
   tbody.innerHTML = '';
@@ -237,24 +233,21 @@ function renderizarTabla(participaciones) {
       <td>${p.nombre || ''}</td>
       <td>${p.telefono || ''}</td>
       <td>${p.correo || ''}</td>
-      <td>${Array.isArray(p.numeros) ? p.numeros.join(', ') : p.numeros || ''}</td>
+      <td>${Array.isArray(p.numeros) ? p.numeros.join(', ') : ''}</td>
       <td>${p.fecha ? new Date(p.fecha).toLocaleString() : ''}</td>
       <td><span class="estado-${p.estado}">${p.estado?.charAt(0).toUpperCase() + p.estado?.slice(1) || 'Desconocido'}</span></td>
       <td>
-        ${
-          p.estado === 'pendiente'
-            ? `
-              <button class="btn-validar" onclick="validarParticipacion(${p.id})">Validar</button>
-              <button class="btn-rechazar" onclick="rechazarParticipacion(${p.id})">Rechazar</button>
-            `
-            : `<span class="estado-${p.estado}">${p.estado?.charAt(0).toUpperCase() + p.estado?.slice(1) || 'Desconocido'}</span>`
-        }
+        ${p.estado === 'pendiente' ? `
+          <button class="btn-validar" onclick="validarParticipacion(${p.id})">Validar</button>
+          <button class="btn-rechazar" onclick="rechazarParticipacion(${p.id})">Rechazar</button>
+        ` : `<span class="estado-${p.estado}">${p.estado?.charAt(0).toUpperCase() + p.estado?.slice(1)}</span>`}
       </td>
     `;
     tbody.appendChild(tr);
   });
 }
 
+// === BÚSQUEDA Y GANADOR ===
 async function buscarParticipacion() {
   const term = document.getElementById('searchInput').value.toLowerCase();
   const todas = await obtenerParticipacionesDesdeBackend();
@@ -262,7 +255,7 @@ async function buscarParticipacion() {
     (p.nombre?.toLowerCase().includes(term)) ||
     (p.telefono?.includes(term)) ||
     (p.correo?.toLowerCase().includes(term)) ||
-    (Array.isArray(p.numeros) ? p.numeros.some(n => n.includes(term)) : (p.numeros?.includes(term)))
+    (Array.isArray(p.numeros) ? p.numeros.some(n => n.includes(term)) : false)
   );
   renderizarTabla(filtradas);
 }
@@ -287,14 +280,10 @@ async function encontrarGanador() {
   }, 1000);
 }
 
-function descargarComprobante() {
-  alert('📄 Comprobante descargado (simulado).');
-}
-
 // === EVENTOS ===
 document.getElementById('searchBtn').addEventListener('click', buscarParticipacion);
 document.getElementById('findWinnerBtn').addEventListener('click', encontrarGanador);
-document.getElementById('descargarBtn').addEventListener('click', descargarComprobante);
+document.getElementById('descargarBtn').addEventListener('click', () => alert('📄 Comprobante descargado (simulado).'));
 document.getElementById('ganadorPopup').addEventListener('click', function(e) {
   if (e.target === this) {
     this.style.display = 'none';
