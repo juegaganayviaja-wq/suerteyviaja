@@ -9,18 +9,18 @@ const path = require('path');
 const app = express();
 const PORT = process.env.PORT || 3000;
 
-// === CORS: dominios SIN espacios ni barras ===
+// === CORS: SIN espacios en las URLs ===
 app.use(cors({
   origin: [
     'http://localhost:3000',
-    'https://viajaydisfruta.onrender.com',   // ✅ sin espacios
-    'https://suerteyviaja.netlify.app'       // ✅ sin espacios
+    'https://viajaydisfruta.onrender.com',
+    'https://suerteyviaja.netlify.app'
   ]
 }));
 
 app.use(express.json({ limit: '10mb' }));
 
-// === SERVE ARCHIVOS ESTÁTICOS (frontend) ===
+// === SERVE ARCHIVOS ESTÁTICOS ===
 app.use(express.static(path.join(__dirname, 'public')));
 
 // === SUPABASE ===
@@ -32,7 +32,7 @@ const supabase = createClient(
 // === RESEND ===
 const resend = new Resend(process.env.RESEND_API_KEY);
 
-// === RUTA RAÍZ: sirve index.html ===
+// === RUTA RAÍZ ===
 app.get('/', (req, res) => {
   res.sendFile(path.join(__dirname, 'public', 'index.html'));
 });
@@ -42,7 +42,7 @@ app.get('/api/health', (req, res) => {
   res.json({ status: 'OK', message: 'Backend funcionando.' });
 });
 
-// // === OBTENER NÚMEROS OCUPADOS ===
+// === OBTENER NÚMEROS OCUPADOS ===
 app.get('/api/ocupados', async (req, res) => {
   try {
     const { data, error } = await supabase
@@ -57,7 +57,6 @@ app.get('/api/ocupados', async (req, res) => {
         .filter(p => 
           p.estado === 'confirmado' || 
           (p.estado === 'pendiente' && p.timestamp > ahora - TREINTA_MINUTOS)
-          // ⚠️ Los rechazados NO se incluyen → se liberan inmediatamente
         )
         .flatMap(p => p.numeros || [])
     );
@@ -83,6 +82,67 @@ async function enviarCorreo(to, subject, html) {
     throw new Error('No se pudo enviar el correo.');
   }
 }
+
+// === REGISTRAR PARTICIPACIÓN ===
+app.post('/api/reservar', async (req, res) => {
+  const { nombre, telefono, correo, numeros, referencia, fecha, timestamp } = req.body;
+  if (!nombre || !telefono || !correo || !referencia || !fecha || !timestamp || !Array.isArray(numeros) || numeros.length < 2) {
+    return res.status(400).json({ error: 'Faltan datos o números insuficientes.' });
+  }
+
+  try {
+    // Verificar números duplicados
+    const { data: todas, error: errCheck } = await supabase
+      .from('participaciones')
+      .select('numeros');
+    if (errCheck) throw errCheck;
+
+    const ocupados = new Set(todas.flatMap(p => p.numeros || []));
+    const repetidos = numeros.filter(n => ocupados.has(n));
+    if (repetidos.length > 0) {
+      return res.status(409).json({ error: `Números ya usados: ${repetidos.join(', ')}` });
+    }
+
+    // Verificar referencia duplicada
+    const { data: referencias, error: refError } = await supabase
+      .from('participaciones')
+      .select('referencia', { count: 'exact' })
+      .eq('referencia', referencia);
+
+    if (refError) {
+      console.error('Error al verificar referencia:', refError);
+      throw refError;
+    }
+
+    if (referencias && referencias.length > 0) {
+      return res.status(409).json({ error: 'La referencia de pago ya ha sido utilizada.' });
+    }
+
+    // Insertar participación
+    const { data, error } = await supabase
+      .from('participaciones')
+      .insert([{ nombre, telefono, correo, numeros, referencia, fecha, estado: 'pendiente', timestamp }])
+      .select();
+    if (error) throw error;
+
+    // Enviar correo
+    await enviarCorreo(
+      correo,
+      '📄 Comprobante recibido - Pendiente de validación',
+      `<h2>📄 ¡Tu comprobante ha sido recibido!</h2>
+       <p>Hola <strong>${nombre}</strong>,</p>
+       <p>Hemos recibido tu comprobante de pago. Nuestro equipo lo está revisando.</p>
+       <p><strong>Números jugados:</strong> ${numeros.map(n => `<span style="background:#e3f2fd; padding:4px 8px; border-radius:4px; margin:2px;">${n}</span>`).join(' ')}</p>
+       <p>Te notificaremos cuando tu participación sea validada.</p>
+       <p>Gracias por participar en <strong>Gana y Viaja</strong> 🎉</p>`
+    );
+
+    res.status(201).json({ id: data[0].id });
+  } catch (err) {
+    console.error('❌ Error al registrar:', err);
+    res.status(500).json({ error: 'Error al registrar participación.' });
+  }
+});
 
 // === VALIDAR PARTICIPACIÓN ===
 app.post('/api/participacion/:id/validar', async (req, res) => {
@@ -111,8 +171,18 @@ app.post('/api/participacion/:id/validar', async (req, res) => {
       '✅ ¡Tu participación ha sido validada!',
       `<h2>✅ ¡Tu participación ha sido validada!</h2>
        <p>Hola <strong>${participacion.nombre}</strong>,</p>
-       <p>Tus números están confirmados:</
+       <p>Tus números están confirmados:</p>
+       <p><strong>Números:</strong> ${participacion.numeros.map(n => `<span style="background:#1976d2; color:white; padding:4px 8px; border-radius:4px; margin:2px;">${n}</span>`).join(' ')}</p>
+       <p>¡Mucha suerte en el sorteo!</p>
+       <p>Equipo de <strong>Gana y Viaja</strong></p>`
+    );
 
+    res.json({ success: true, message: 'Participación validada.' });
+  } catch (err) {
+    console.error('❌ Error al validar:', err);
+    res.status(500).json({ error: 'Error al validar la participación.' });
+  }
+});
 
 // === RECHAZAR PARTICIPACIÓN ===
 app.post('/api/participacion/:id/rechazar', async (req, res) => {
@@ -154,12 +224,6 @@ app.post('/api/participacion/:id/rechazar', async (req, res) => {
   }
 });
 
-// === MANEJO DE ERRORES GLOBAL ===
-app.use((err, req, res, next) => {
-  console.error('Error no capturado:', err);
-  res.status(500).json({ error: 'Error interno del servidor.' });
-});
-
 // === OBTENER TODAS LAS PARTICIPACIONES (para admin) ===
 app.get('/api/participaciones', async (req, res) => {
   try {
@@ -175,20 +239,22 @@ app.get('/api/participaciones', async (req, res) => {
   }
 });
 
-
-
 // === LOGIN DE ADMINISTRADOR ===
 app.post('/api/admin/login', async (req, res) => {
   const { password } = req.body;
   const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || 'admin123';
-  
   if (password === ADMIN_PASSWORD) {
-    // Genera un token de sesión simple
     const token = 'admin-session-' + Date.now();
     res.json({ success: true, token });
   } else {
     res.status(401).json({ error: 'Contraseña incorrecta' });
   }
+});
+
+// === MANEJO DE ERRORES GLOBAL ===
+app.use((err, req, res, next) => {
+  console.error('Error no capturado:', err);
+  res.status(500).json({ error: 'Error interno del servidor.' });
 });
 
 // === INICIAR SERVIDOR ===
