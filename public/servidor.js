@@ -216,6 +216,21 @@ app.use((err, req, res, next) => {
   res.status(500).json({ error: 'Error interno del servidor.' });
 });
 
+// === OBTENER TODAS LAS PARTICIPACIONES (para admin) ===
+app.get('/api/participaciones', async (req, res) => {
+  try {
+    const { data, error } = await supabase
+      .from('participaciones')
+      .select('*')
+      .order('timestamp', { ascending: false });
+    if (error) throw error;
+    res.json(data);
+  } catch (err) {
+    console.error('❌ Error al obtener participaciones:', err);
+    res.status(500).json({ error: 'Error al obtener participaciones.' });
+  }
+});
+
 // === INICIAR SERVIDOR ===
 app.listen(PORT, '0.0.0.0', () => {
   console.log(`🚀 Backend corriendo en puerto ${PORT}`);
