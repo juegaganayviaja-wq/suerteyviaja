@@ -71,7 +71,7 @@ app.get('/api/ocupados', async (req, res) => {
 async function enviarCorreo(to, subject, html) {
   try {
     await resend.emails.send({
-      from: 'Gana y Viaja <juegaganayviaja@gmail.com>',
+      from: 'Gana y Viaja <onboarding@resend.dev>',
       to,
       subject,
       html
