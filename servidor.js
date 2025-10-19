@@ -84,62 +84,34 @@ async function enviarCorreo(to, subject, html) {
   }
 }
 
-// === REGISTRAR PARTICIPACIÓN ===
-app.post('/api/reservar', async (req, res) => {
-  const { nombre, telefono, correo, numeros, referencia, fecha, timestamp } = req.body;
-  if (!nombre || !telefono || !correo || !referencia || !fecha || !timestamp || !Array.isArray(numeros) || numeros.length < 2) {
-    return res.status(400).json({ error: 'Faltan datos o números insuficientes.' });
-  }
-
+// === VALIDAR PARTICIPACIÓN ===
+app.post('/api/participacion/:id/validar', async (req, res) => {
+  const { id } = req.params;
   try {
-    // 1. Verificar números duplicados
-    const { data: todas, error: errCheck } = await supabase
+    const { data: participacion, error: fetchError } = await supabase
       .from('participaciones')
-      .select('numeros');
-    if (errCheck) throw errCheck;
-
-    const ocupados = new Set(todas.flatMap(p => p.numeros || []));
-    const repetidos = numeros.filter(n => ocupados.has(n));
-    if (repetidos.length > 0) {
-      return res.status(409).json({ error: `Números ya usados: ${repetidos.join(', ')}` });
-    }
-
-    // 🔒 2. VALIDAR REFERENCIA DUPLICADA (aquí va la validación)
-    const { data: existente, error: refError } = await supabase
-      .from('participaciones')
-      .select('referencia')
-      .eq('referencia', referencia)
+      .select('*')
+      .eq('id', id)
       .single();
-
-    if (refError?.code !== 'PGRST116') { // PGRST116 = "no rows returned"
-      return res.status(409).json({ error: 'La referencia de pago ya ha sido utilizada.' });
+    if (fetchError || !participacion) {
+      return res.status(404).json({ error: 'Participación no encontrada.' });
+    }
+    if (participacion.estado === 'confirmado') {
+      return res.status(400).json({ error: 'Ya validada.' });
     }
 
-    // 3. Insertar nueva participación
-    const { data, error } = await supabase
+    const { error: updateError } = await supabase
       .from('participaciones')
-      .insert([{ nombre, telefono, correo, numeros, referencia, fecha, estado: 'pendiente', timestamp }])
-      .select();
-    if (error) throw error;
+      .update({ estado: 'confirmado' })
+      .eq('id', id);
+    if (updateError) throw updateError;
 
-    // 4. Enviar correo y responder
     await enviarCorreo(
-      correo,
-      '📄 Comprobante recibido - Pendiente de validación',
-      `<h2>📄 ¡Tu comprobante ha sido recibido!</h2>
-       <p>Hola <strong>${nombre}</strong>,</p>
-       <p>Hemos recibido tu comprobante de pago. Nuestro equipo lo está revisando.</p>
-       <p><strong>Números jugados:</strong> ${numeros.map(n => `<span style="background:#e3f2fd; padding:4px 8px; border-radius:4px; margin:2px;">${n}</span>`).join(' ')}</p>
-       <p>Te notificaremos cuando tu participación sea validada.</p>
-       <p>Gracias por participar en <strong>Gana y Viaja</strong> 🎉</p>`
-    );
-
-    res.status(201).json({ id: data[0].id });
-  } catch (err) {
-    console.error('❌ Error al registrar:', err);
-    res.status(500).json({ error: 'Error al registrar participación.' });
-  }
-});
+      participacion.correo,
+      '✅ ¡Tu participación ha sido validada!',
+      `<h2>✅ ¡Tu participación ha sido validada!</h2>
+       <p>Hola <strong>${participacion.nombre}</strong>,</p>
+       <p>Tus números están confirmados:</
 
 
 // === RECHAZAR PARTICIPACIÓN ===
