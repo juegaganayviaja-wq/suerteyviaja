@@ -1,0 +1,1227 @@
+servidor
+
+
+// servidor.js
+require('dotenv').config();
+const express = require('express');
+const cors = require('cors');
+const { createClient } = require('@supabase/supabase-js');
+const { Resend } = require('resend');
+const path = require('path');
+
+const app = express();
+const PORT = process.env.PORT || 3000;
+
+// === CORS: dominios SIN espacios ni barras ===
+app.use(cors({
+  origin: [
+    'http://localhost:3000',
+    'https://viajaydisfruta.onrender.com',   // ✅ sin espacios
+    'https://suerteyviaja.netlify.app'       // ✅ sin espacios
+  ]
+}));
+
+app.use(express.json({ limit: '10mb' }));
+
+// === SERVE ARCHIVOS ESTÁTICOS (frontend) ===
+app.use(express.static(path.join(__dirname, 'public')));
+
+// === SUPABASE ===
+const supabase = createClient(
+  process.env.SUPABASE_URL,
+  process.env.SUPABASE_SERVICE_ROLE_KEY
+);
+
+// === RESEND ===
+const resend = new Resend(process.env.RESEND_API_KEY);
+
+// === RUTA RAÍZ: sirve index.html ===
+app.get('/', (req, res) => {
+  res.sendFile(path.join(__dirname, 'public', 'index.html'));
+});
+
+// === RUTA DE SALUD ===
+app.get('/api/health', (req, res) => {
+  res.json({ status: 'OK', message: 'Backend funcionando.' });
+});
+
+// === OBTENER NÚMEROS OCUPADOS ===
+app.get('/api/ocupados', async (req, res) => {
+  try {
+    const { data, error } = await supabase
+      .from('participaciones')
+      .select('numeros, estado, timestamp');
+    if (error) throw error;
+
+    const TREINTA_MINUTOS = 30 * 60 * 1000;
+    const ahora = Date.now();
+    const ocupados = new Set(
+      data
+        .filter(p => 
+          p.estado === 'confirmado' || 
+          (p.estado === 'pendiente' && p.timestamp > ahora - TREINTA_MINUTOS)
+        )
+        .flatMap(p => p.numeros || [])
+    );
+    res.json({ numeros: [...ocupados] });
+  } catch (err) {
+    console.error('❌ Error al obtener números ocupados:', err);
+    res.status(500).json({ error: 'Error al obtener números ocupados.' });
+  }
+});
+
+// === FUNCIÓN PARA ENVIAR CORREO ===
+async function enviarCorreo(to, subject, html) {
+  try {
+    await resend.emails.send({
+      from: 'Gana y Viaja <juegaganayviaja@gmail.com>',
+      to,
+      subject,
+      html
+    });
+    console.log('✅ Correo enviado a:', to);
+  } catch (err) {
+    console.error('❌ Error al enviar correo:', err);
+    throw new Error('No se pudo enviar el correo.');
+  }
+}
+
+// === REGISTRAR PARTICIPACIÓN ===
+app.post('/api/reservar', async (req, res) => {
+  const { nombre, telefono, correo, numeros, referencia, fecha, timestamp } = req.body;
+  if (!nombre || !telefono || !correo || !referencia || !fecha || !timestamp || !Array.isArray(numeros) || numeros.length < 2) {
+    return res.status(400).json({ error: 'Faltan datos o números insuficientes.' });
+  }
+
+  try {
+    const { data: todas, error: errCheck } = await supabase
+      .from('participaciones')
+      .select('numeros');
+    if (errCheck) throw errCheck;
+
+    const ocupados = new Set(todas.flatMap(p => p.numeros || []));
+    const repetidos = numeros.filter(n => ocupados.has(n));
+    if (repetidos.length > 0) {
+      return res.status(409).json({ error: `Números ya usados: ${repetidos.join(', ')}` });
+    }
+
+    const { data, error } = await supabase
+      .from('participaciones')
+      .insert([{ nombre, telefono, correo, numeros, referencia, fecha, estado: 'pendiente', timestamp }])
+      .select();
+    if (error) throw error;
+
+    await enviarCorreo(
+      correo,
+      '📄 Comprobante recibido - Pendiente de validación',
+      `<h2>📄 ¡Tu comprobante ha sido recibido!</h2>
+       <p>Hola <strong>${nombre}</strong>,</p>
+       <p>Hemos recibido tu comprobante de pago. Nuestro equipo lo está revisando.</p>
+       <p><strong>Números jugados:</strong> ${numeros.map(n => `<span style="background:#e3f2fd; padding:4px 8px; border-radius:4px; margin:2px;">${n}</span>`).join(' ')}</p>
+       <p>Te notificaremos cuando tu participación sea validada.</p>
+       <p>Gracias por participar en <strong>Gana y Viaja</strong> 🎉</p>`
+    );
+
+    res.status(201).json({ id: data[0].id });
+  } catch (err) {
+    console.error('❌ Error al registrar:', err);
+    res.status(500).json({ error: 'Error al registrar participación.' });
+  }
+});
+
+// === VALIDAR PARTICIPACIÓN ===
+app.post('/api/participacion/:id/validar', async (req, res) => {
+  const { id } = req.params;
+  try {
+    const { data: participacion, error: fetchError } = await supabase
+      .from('participaciones')
+      .select('*')
+      .eq('id', id)
+      .single();
+    if (fetchError || !participacion) {
+      return res.status(404).json({ error: 'Participación no encontrada.' });
+    }
+    if (participacion.estado === 'confirmado') {
+      return res.status(400).json({ error: 'Ya validada.' });
+    }
+
+    const { error: updateError } = await supabase
+      .from('participaciones')
+      .update({ estado: 'confirmado' })
+      .eq('id', id);
+    if (updateError) throw updateError;
+
+    await enviarCorreo(
+      participacion.correo,
+      '✅ ¡Tu participación ha sido validada!',
+      `<h2>✅ ¡Tu participación ha sido validada!</h2>
+       <p>Hola <strong>${participacion.nombre}</strong>,</p>
+       <p>Tus números están confirmados:</p>
+       <p><strong>Números:</strong> ${participacion.numeros.map(n => `<span style="background:#1976d2; color:white; padding:4px 8px; border-radius:4px; margin:2px;">${n}</span>`).join(' ')}</p>
+       <p>¡Mucha suerte en el sorteo!</p>
+       <p>Equipo de <strong>Gana y Viaja</strong></p>`
+    );
+
+    res.json({ success: true, message: 'Participación validada.' });
+  } catch (err) {
+    console.error('❌ Error al validar:', err);
+    res.status(500).json({ error: 'Error al validar la participación.' });
+  }
+});
+
+// === RECHAZAR PARTICIPACIÓN ===
+app.post('/api/participacion/:id/rechazar', async (req, res) => {
+  const { id } = req.params;
+  try {
+    const { data: participacion, error: fetchError } = await supabase
+      .from('participaciones')
+      .select('*')
+      .eq('id', id)
+      .single();
+    if (fetchError || !participacion) {
+      return res.status(404).json({ error: 'Participación no encontrada.' });
+    }
+    if (participacion.estado === 'confirmado') {
+      return res.status(400).json({ error: 'No se puede rechazar una participación ya validada.' });
+    }
+
+    const { error: updateError } = await supabase
+      .from('participaciones')
+      .update({ estado: 'rechazado' })
+      .eq('id', id);
+    if (updateError) throw updateError;
+
+    await enviarCorreo(
+      participacion.correo,
+      '⚠️ Tu participación no pudo ser validada',
+      `<h2>⚠️ Tu participación no pudo ser validada</h2>
+       <p>Hola <strong>${participacion.nombre}</strong>,</p>
+       <p>Lamentamos informarte que tu comprobante no pudo ser verificado.</p>
+       <p>Si crees que es un error, envía nuevamente el comprobante desde la página web.</p>
+       <p>Gracias por tu interés.</p>
+       <p>Equipo de <strong>Gana y Viaja</strong></p>`
+    );
+
+    res.json({ success: true, message: 'Participación rechazada.' });
+  } catch (err) {
+    console.error('❌ Error al rechazar:', err);
+    res.status(500).json({ error: 'Error al rechazar la participación.' });
+  }
+});
+
+// === MANEJO DE ERRORES GLOBAL ===
+app.use((err, req, res, next) => {
+  console.error('Error no capturado:', err);
+  res.status(500).json({ error: 'Error interno del servidor.' });
+});
+
+// === INICIAR SERVIDOR ===
+app.listen(PORT, '0.0.0.0', () => {
+  console.log(`🚀 Backend corriendo en puerto ${PORT}`);
+  console.log(`🔗 URL pública: https://viajaydisfruta.onrender.com`);
+});
+
+
+
+index
+
+
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Gana y Viaja</title>
+  <link rel="stylesheet" href="playa.css" />
+  <script src="https://cdn.jsdelivr.net/npm/canvas-confetti@1.9.2/dist/confetti.browser.min.js"></script>
+  <style>
+    body { font-family: Arial, sans-serif; margin: 0; padding: 0; background: #f0f8ff; }
+    .container { max-width: 1200px; margin: 0 auto; padding: 10px; }
+    #cintilloTitulo {
+      background: #1976d2; color: white; padding: 12px; text-align: center; font-weight: bold;
+    }
+    #bannerPromocional {
+      background: #fff8e1; padding: 12px; margin: 15px 0; border-left: 4px solid #ffc107;
+      font-size: 14px; line-height: 1.4;
+    }
+    #btnIniciar {
+      display: block; margin: 20px auto; padding: 12px 30px; background: #e53935;
+      color: white; border: none; border-radius: 5px; font-size: 18px; cursor: pointer;
+    }
+    .btn-paso {
+      padding: 10px; margin: 5px 0; border: none; border-radius: 4px; cursor: pointer;
+      font-size: 14px; width: 100%;
+    }
+    .btn-paso:hover { opacity: 0.9; }
+    #btnIrAPago { background: #1976d2; color: white; }
+    #btnEnviarComprobante { background: #4caf50; color: white; }
+    #btnVolverADatos, #btnVolverAPago, #btnVolverAlInicio {
+      background: #9e9e9e; color: white;
+    }
+    #modal {
+      position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+      background: rgba(0,0,0,0.8); display: none; justify-content: center; align-items: center; z-index: 1000;
+    }
+    #modalContent {
+      background: white; padding: 20px; border-radius: 10px; max-width: 90%; width: 600px;
+      max-height: 80vh; overflow-y: auto;
+    }
+    .grid-numeros {
+      display: grid; grid-template-columns: repeat(10, 1fr); gap: 4px; margin-top: 10px;
+    }
+    .numero-celda {
+      padding: 6px; text-align: center; border: 1px solid #ddd; border-radius: 4px;
+      font-size: 12px; cursor: pointer;
+    }
+    .numero-celda:hover { background: #e3f2fd; }
+    .numero-celda.seleccionado {
+      background: #1976d2 !important; color: white !important;
+    }
+  </style>
+</head>
+<body>
+
+<div class="container">
+  <div id="cintilloTitulo">
+    ¡Bienvenido a Gana y Viaja! ¡Participa y gana un fin de semana de relax!
+  </div>
+
+  <div id="bannerPromocional">
+    <strong>Por tan solo 100 bolívares</strong>, gana un viaje a Tucacas 3 días y 2 noches para 4 personas, 2 cajas de cerveza de lata, un combo parrillero y traslado al Parque Nacional Morrocoy.
+    <br>
+    <span style="color:red; font-weight:bold;">La jugada obligatoria es de dos números. El sorteo se realizará una vez se complete la venta total de los tickets. El número ganador será tomado del sorteo de las 10:00 pm del Super Gana de la Lotería del Táchira.</span>
+  </div>
+
+  <div id="contenedorPrincipal">
+    <div id="carruselContainer">
+      <button id="btnPrev"><</button>
+      <div id="carrusel">
+        <img src="Imagenes/651168164.jpg" alt="Instalaciones" />
+        <img src="Imagenes/sala3.jpg" alt="Instalaciones" />
+        <img src="Imagenes/hprincipal2.jpg" alt="Instalaciones" />
+        <img src="Imagenes/hprincipal.jpg" alt="Instalaciones" />
+        <img src="Imagenes/areas comunes2.jpg" alt="Instalaciones" />
+        <img src="Imagenes/piscina.jpg" alt="Instalaciones"/>
+        <img src="Imagenes/cerveza2.jpeg" alt="Refrescate" />
+        <img src="Imagenes/cerveza4.jpg" alt="Refrescate" />
+        <img src="Imagenes/cerveza3.jpg" alt="Refrescate" />
+        <img src="Imagenes/cerveza.jpg" alt="Refrescate" />
+      </div>
+      <button id="btnNext">></button>
+    </div>
+
+    <div id="moduloPagoCompleto" style="display:none; position:static; width:100%; padding:20px; box-sizing:border-box;">
+      <div id="contenedorPago" style="background:white; padding:20px; border-radius:10px; box-shadow: 0 4px 20px rgba(0,0,0,0.2); max-width:800px; width:90%; margin:0 auto;">
+        <div id="pasoDatos" class="modulo-seccion activa">
+          <h2 style="margin:0 0 10px; font-size:20px; color:#333;">Información Personal</h2>
+          <div class="form-group" style="margin-bottom:15px; font-size:13px;">
+            <label style="display:block; margin-bottom:5px; font-weight:bold;">Nombre y Apellido</label>
+            <input type="text" id="nombre" placeholder="Nombre y Apellido" required style="width:100%; padding:8px; border:1px solid #ccc; border-radius:4px; font-size:14px;" />
+          </div>
+          <div class="form-group" style="margin-bottom:15px; font-size:13px;">
+            <label style="display:block; margin-bottom:5px; font-weight:bold;">Número de teléfono</label>
+            <div style="display:flex; gap:10px; align-items:center;">
+              <select id="prefijoTelefono" style="padding:8px; border:1px solid #ccc; border-radius:4px; font-size:14px; width:100px;">
+                <option value="+58" selected>+58 (Venezuela)</option>
+                <option value="+57">+57 (Colombia)</option>
+                <option value="+54">+54 (Argentina)</option>
+                <option value="+52">+52 (México)</option>
+                <option value="+598">+598 (Uruguay)</option>
+                <option value="+595">+595 (Paraguay)</option>
+                <option value="+593">+593 (Ecuador)</option>
+                <option value="+507">+507 (Panamá)</option>
+                <option value="+506">+506 (Costa Rica)</option>
+                <option value="+504">+504 (Honduras)</option>
+                <option value="+502">+502 (Guatemala)</option>
+                <option value="+503">+503 (El Salvador)</option>
+                <option value="+505">+505 (Nicaragua)</option>
+                <option value="+51">+51 (Perú)</option>
+                <option value="+56">+56 (Chile)</option>
+                <option value="+1">+1 (Estados Unidos)</option>
+              </select>
+              <input type="tel" id="telefono" placeholder="4141234567" required style="flex:1; padding:8px; border:1px solid #ccc; border-radius:4px; font-size:14px;" />
+            </div>
+          </div>
+          <div class="form-group" style="margin-bottom:15px; font-size:13px;">
+            <label style="display:block; margin-bottom:5px; font-weight:bold;">Correo electrónico</label>
+            <input type="email" id="correo" placeholder="tu@email.com" required style="width:100%; padding:8px; border:1px solid #ccc; border-radius:4px; font-size:14px;" />
+          </div>
+          <div style="display:flex; flex-direction:column; gap:10px; margin-top:20px; width:100%;">
+            <button class="btn-paso" id="btnIrAPago">Continuar al pago</button>
+            <button class="btn-paso" id="btnVolverADatos">Volver al Inicio</button>
+          </div>
+        </div>
+
+        <div id="pasoPago" class="modulo-seccion" style="display:none;">
+          <h2 style="margin:0 0 10px; font-size:20px; color:#333;">¡PAGA AHORA!</h2>
+          <p style="margin:0 0 20px; font-size:14px; color:#666;">Confirma tu pago para participar en el sorteo de hoy.</p>
+
+          <div class="datos-pago" style="display:grid; grid-template-columns: 1fr 1fr; gap:15px; margin-bottom:20px;">
+            <div class="datos-lista" style="background:#f9f9f9; padding:15px; border-radius:8px; border:1px solid #ddd; text-align:left; font-size:13px;">
+              <h3 style="margin:0 0 10px; font-size:15px; color:#333;">Datos de Pago</h3>
+              <div class="dato" style="margin:3px 0;"><strong>Método:</strong> PAGOMOVIL</div>
+              <div class="dato" style="margin:3px 0;"><strong>Correo:</strong> monederodh@gmail.com</div>
+              <div class="dato" style="margin:3px 0;"><strong>Banco:</strong> Bancamiga Universal</div>
+              <div class="dato" style="margin:3px 0;"><strong>Cuenta:</strong> 0172</div>
+              <div class="dato" style="margin:3px 0;"><strong>Cédula:</strong> 12698817</div>
+              <div class="dato" style="margin:3px 0;"><strong>Teléfono:</strong> 04145045090</div>
+              <div class="dato" style="margin:3px 0;"><strong>Monto BS:</strong> <span id="montoBS">100</span></div>
+              <div class="dato" style="margin:3px 0;"><strong>Monto USD:</strong> 0.57</div>
+            </div>
+            <div class="qr-container" style="text-align:center; background:#fff; padding:15px; border-radius:8px; border:1px solid #ddd; display:flex; flex-direction:column; justify-content:center; align-items:center; font-size:13px;">
+              <h3 style="margin:0 0 10px; font-size:15px; color:#333;">Escanea el QR</h3>
+              <img id="qrBanco" src="Imagenes/QR.jpeg" alt="QR del banco" style="max-width:100%; height:auto; border-radius:4px; box-shadow: 0 2px 5px rgba(0,0,0,0.1);" />
+            </div>
+          </div>
+
+          <div class="form-group" style="margin-bottom:15px; font-size:13px;">
+            <label style="display:block; margin-bottom:5px; font-weight:bold;">Últimos 6 Dígitos (Transacción):</label>
+            <input type="text" id="referencia" maxlength="6" placeholder="123456" style="width:100%; padding:8px; border:1px solid #ccc; border-radius:4px; font-size:14px; text-align:center;" />
+          </div>
+
+          <div class="form-group" style="margin-bottom:15px; font-size:13px;">
+            <label style="display:block; margin-bottom:5px; font-weight:bold;">CAPTURA DEL PAGO REALIZADO</label>
+            <input type="file" id="captura" accept="image/*" style="width:100%; padding:8px; border:1px solid #ccc; border-radius:4px; font-size:14px;" />
+          </div>
+
+          <div style="margin-top:15px; text-align:center; font-size:13px;">
+            <div style="background:#f9f9f9; padding:10px; border-radius:8px; border:1px solid #ddd; display:inline-block; max-width:100%;">
+              <label style="display:block; margin-bottom:5px; font-weight:bold; font-size:14px;">Vista previa de la captura</label>
+              <img id="previewImagen" src="" alt="Vista previa" style="max-width:100%; max-height:150px; object-fit:contain; border:1px solid #ccc; border-radius:4px; box-shadow: 0 2px 5px rgba(0,0,0,0.1);" />
+            </div>
+          </div>
+
+          <div style="display:flex; flex-direction:column; gap:10px; margin-top:20px; width:100%;">
+            <button class="btn-paso" id="btnEnviarComprobante">Enviar Comprobante</button>
+            <button class="btn-paso" id="btnVolverAPago">Volver a Datos</button>
+            <button class="btn-paso" id="btnVolverAlInicio">Volver al Inicio</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <button id="btnIniciar">Comprar ahora</button>
+  <!-- El botón de admin ya no es necesario -->
+</div>
+
+<!-- Modal de selección -->
+<div id="modal">
+  <div id="modalContent">
+    <div id="titulo">Elige tus números (0000 - 9999)</div>
+    <div id="opciones">
+      <button class="opcion" id="jugarAzar">Jugar al Azar</button>
+    </div>
+    <div id="contenido">
+      <div id="listaNumeros"></div>
+      <div style="text-align:center; margin-top:15px;">
+        <button id="btnConfirmar">CONFIRMAR SELECCIÓN</button>
+        <button id="btnCambiar" style="display:none;">Cambiar Números</button>
+        <button id="btnCerrar">Cerrar</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+// === CONFIGURACIÓN ===
+const TOTAL_NUMBERS = 10000;
+const PRICE_PER_NUMBER = 100;
+const MIN_SELECTION = 2;
+const API_URL = 'https://viajaydisfruta.onrender.com'; // 👈 tu URL real de Render; //
+
+// === ESTADO ===
+let selectedNumbers = [];
+let carruselInterval;
+
+// === DOM ===
+const modal = document.getElementById('modal');
+const listaNumerosDiv = document.getElementById('listaNumeros');
+const btnConfirmar = document.getElementById('btnConfirmar');
+const btnCerrar = document.getElementById('btnCerrar');
+const btnCambiar = document.getElementById('btnCambiar');
+const jugarAzarBtn = document.getElementById('jugarAzar');
+const btnIniciar = document.getElementById('btnIniciar');
+const carruselContainer = document.getElementById('carruselContainer');
+const moduloPagoCompleto = document.getElementById('moduloPagoCompleto');
+const pasoDatos = document.getElementById('pasoDatos');
+const pasoPago = document.getElementById('pasoPago');
+const montoBSEl = document.getElementById('montoBS');
+
+// === CARRUSEL ===
+const carrusel = document.getElementById('carrusel');
+const imgs = carrusel.querySelectorAll('img');
+const btnPrev = document.getElementById('btnPrev');
+const btnNext = document.getElementById('btnNext');
+let currentIndex = 0;
+
+function actualizarCarrusel() {
+  if (imgs.length === 0) return;
+  const width = carrusel.clientWidth;
+  carrusel.style.transform = `translateX(-${currentIndex * width}px)`;
+}
+
+function siguienteImagen() {
+  currentIndex = (currentIndex + 1) % imgs.length;
+  actualizarCarrusel();
+}
+
+carruselInterval = setInterval(siguienteImagen, 4000);
+
+btnPrev.onclick = () => {
+  clearInterval(carruselInterval);
+  currentIndex = (currentIndex - 1 + imgs.length) % imgs.length;
+  actualizarCarrusel();
+  carruselInterval = setInterval(siguienteImagen, 4000);
+};
+
+btnNext.onclick = () => {
+  clearInterval(carruselInterval);
+  siguienteImagen();
+  carruselInterval = setInterval(siguienteImagen, 4000);
+};
+
+window.addEventListener('resize', actualizarCarrusel);
+
+// === OBTENER NÚMEROS OCUPADOS ===
+async function obtenerNumerosOcupados() {
+  try {
+    const response = await fetch(`${API_URL}/api/ocupados`);
+    if (!response.ok) throw new Error('Error al obtener números ocupados');
+    const data = await response.json();
+    return new Set(data.numeros);
+  } catch (error) {
+    console.error('Error al obtener números ocupados:', error);
+    return new Set();
+  }
+}
+
+// === SELECCIÓN DE NÚMEROS ===
+async function renderGrid() {
+  const ocupados = await obtenerNumerosOcupados();
+  listaNumerosDiv.innerHTML = '';
+
+  if (selectedNumbers.length > 0) {
+    const selectedContainer = document.createElement('div');
+    selectedContainer.style.textAlign = 'center';
+    selectedContainer.innerHTML = `<p><strong>Números seleccionados:</strong></p>`;
+    const numsDiv = document.createElement('div');
+    numsDiv.style.display = 'flex'; 
+    numsDiv.style.flexWrap = 'wrap'; 
+    numsDiv.style.justifyContent = 'center'; 
+    numsDiv.style.gap = '8px';
+    selectedNumbers.forEach(num => {
+      const span = document.createElement('span');
+      span.textContent = num;
+      span.style.padding = '6px 10px'; 
+      span.style.backgroundColor = '#1976d2'; 
+      span.style.color = 'white';
+      span.style.borderRadius = '4px'; 
+      span.style.fontWeight = 'bold'; 
+      span.style.cursor = 'pointer';
+      span.onclick = () => toggleSelect(num);
+      numsDiv.appendChild(span);
+    });
+    selectedContainer.appendChild(numsDiv);
+    listaNumerosDiv.appendChild(selectedContainer);
+  }
+
+  const gridTitle = document.createElement('h3');
+  gridTitle.textContent = 'Elige más números';
+  listaNumerosDiv.appendChild(gridTitle);
+
+  const gridContainer = document.createElement('div');
+  gridContainer.style.height = '200px'; 
+  gridContainer.style.overflowY = 'auto'; 
+  gridContainer.style.border = '1px solid #ccc';
+  gridContainer.style.borderRadius = '4px'; 
+  gridContainer.style.padding = '10px'; 
+  gridContainer.style.marginTop = '10px';
+
+  const grid = document.createElement('div');
+  grid.className = 'grid-numeros';
+
+  for (let i = 0; i < TOTAL_NUMBERS; i++) {
+    const num = String(i).padStart(4, '0');
+    if (!ocupados.has(num)) { // 👈 Solo si NO está ocupado
+      const cell = document.createElement('div');
+      cell.className = 'numero-celda';
+      cell.textContent = num;
+      if (selectedNumbers.includes(num)) {
+        cell.classList.add('seleccionado');
+      }
+      cell.addEventListener('click', () => toggleSelect(num));
+      grid.appendChild(cell);
+    }
+  }
+
+  gridContainer.appendChild(grid);
+  listaNumerosDiv.appendChild(gridContainer);
+}
+
+function toggleSelect(num) {
+  if (selectedNumbers.includes(num)) {
+    selectedNumbers = selectedNumbers.filter(n => n !== num);
+  } else {
+    selectedNumbers.push(num);
+  }
+
+  renderGrid();
+  updateConfirmButton();
+}
+
+async function playRandom(cantidad = 2) {
+  const ocupados = await obtenerNumerosOcupados();
+  const disponibles = [];
+  for (let i = 0; i < TOTAL_NUMBERS; i++) {
+    const num = String(i).padStart(4, '0');
+    if (!ocupados.has(num)) {
+      disponibles.push(num);
+    }
+  }
+
+  if (disponibles.length < cantidad) {
+    alert('No hay suficientes números disponibles.');
+    return;
+  }
+
+  const seleccion = [];
+  const pool = [...disponibles];
+  for (let i = 0; i < cantidad; i++) {
+    const idx = Math.floor(Math.random() * pool.length);
+    seleccion.push(pool[idx]);
+    pool.splice(idx, 1);
+  }
+  selectedNumbers = seleccion;
+  btnCambiar.style.display = 'inline-block';
+  renderGrid();
+  updateConfirmButton();
+}
+
+function updateConfirmButton() {
+  btnConfirmar.disabled = selectedNumbers.length < MIN_SELECTION;
+}
+
+function resetSelection() {
+  selectedNumbers = [];
+  btnCambiar.style.display = 'none';
+  renderGrid();
+  updateConfirmButton();
+}
+
+// === EVENTOS MODAL ===
+btnIniciar.onclick = async () => {
+  modal.style.display = 'flex';
+  resetSelection();
+  await renderGrid();
+};
+
+jugarAzarBtn.onclick = async () => {
+  const opcion = confirm("¿Jugar con 2 números?\nAceptar = 2 números\nCancelar = elegir entre 3 y 5");
+  if (opcion) {
+    await playRandom(2);
+  } else {
+    let cantidad = prompt("¿Cuántos números? (3 a 5)", "3");
+    cantidad = parseInt(cantidad);
+    if (isNaN(cantidad) || cantidad < 3 || cantidad > 5) cantidad = 3;
+    await playRandom(cantidad);
+  }
+};
+
+btnCambiar.onclick = async () => {
+  await playRandom(selectedNumbers.length);
+};
+
+btnCerrar.onclick = () => {
+  modal.style.display = 'none';
+  resetSelection();
+};
+
+btnConfirmar.onclick = () => {
+  if (selectedNumbers.length < MIN_SELECTION) {
+    alert('Selecciona al menos 2 números.');
+    return;
+  }
+
+  const monto = selectedNumbers.length * PRICE_PER_NUMBER;
+  montoBSEl.textContent = monto;
+
+  carruselContainer.style.display = 'none';
+  btnIniciar.style.display = 'none';
+  moduloPagoCompleto.style.display = 'block';
+  modal.style.display = 'none';
+};
+
+// === FLUJO DE PAGO ===
+document.getElementById('btnIrAPago').onclick = () => {
+  const nombre = document.getElementById('nombre').value.trim();
+  const correo = document.getElementById('correo').value.trim();
+
+  const prefijo = document.getElementById('prefijoTelefono').value;
+  let numeroIngresado = document.getElementById('telefono').value.trim();
+  numeroIngresado = numeroIngresado.replace(/\D/g, '');
+  if (numeroIngresado.length < 7) {
+    alert('El número de teléfono debe tener al menos 7 dígitos.');
+    return;
+  }
+  const telefonoCompleto = prefijo + numeroIngresado;
+  const regexTel = /^\+\d{7,15}$/;
+  if (!regexTel.test(telefonoCompleto)) {
+    alert('Formato de teléfono inválido. Ejemplo: +584141234567');
+    return;
+  }
+
+  const regexEmail = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+  if (!nombre || !correo || !regexEmail.test(correo)) {
+    alert('Complete todos los campos y verifique el correo.');
+    return;
+  }
+
+  window.telefonoValidado = telefonoCompleto;
+  pasoDatos.style.display = 'none';
+  pasoPago.style.display = 'block';
+};
+
+document.getElementById('btnVolverAPago').onclick = () => {
+  pasoPago.style.display = 'none';
+  pasoDatos.style.display = 'block';
+};
+
+document.getElementById('btnVolverADatos').onclick = () => {
+  moduloPagoCompleto.style.display = 'none';
+  carruselContainer.style.display = 'block';
+  btnIniciar.style.display = 'block';
+  resetSelection();
+};
+
+document.getElementById('btnVolverAlInicio').onclick = () => {
+  moduloPagoCompleto.style.display = 'none';
+  carruselContainer.style.display = 'block';
+  btnIniciar.style.display = 'block';
+  resetSelection();
+};
+
+// === CAPTURA DE IMAGEN ===
+document.getElementById('captura').addEventListener('change', function(e) {
+  const file = e.target.files[0];
+  if (file) {
+    const reader = new FileReader();
+    reader.onload = function(e) {
+      document.getElementById('previewImagen').src = e.target.result;
+      document.getElementById('previewImagen').style.display = 'block';
+    };
+    reader.readAsDataURL(file);
+  }
+});
+
+document.getElementById('referencia').addEventListener('input', function(e) {
+  this.value = this.value.replace(/\D/g, '').slice(0,6);
+});
+
+// === ENVIAR COMPROBANTE ===
+document.getElementById('btnEnviarComprobante').onclick = async () => {
+  const ref = document.getElementById('referencia').value;
+  const file = document.getElementById('captura').files[0];
+  const nombre = document.getElementById('nombre').value.trim();
+  const correo = document.getElementById('correo').value.trim();
+
+  if (ref.length !== 6) {
+    alert('Ingresa exactamente 6 dígitos de referencia.');
+    return;
+  }
+  if (!file) {
+    alert('Sube la captura del pago.');
+    return;
+  }
+  if (!nombre || !correo || !window.telefonoValidado) {
+    alert('Completa todos los datos personales.');
+    return;
+  }
+
+  try {
+    const response = await fetch(`${API_URL}/api/reservar`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        nombre,
+        telefono: window.telefonoValidado,
+        correo,
+        numeros: selectedNumbers,
+        referencia: ref,
+        fecha: new Date().toISOString(),
+        timestamp: Date.now()
+      })
+    });
+
+    const data = await response.json();
+    if (response.ok) {
+      mostrarMensajeFuegosArtificiales();
+    } else {
+      alert('❌ ' + (data.error || 'Error al registrar participación.'));
+    }
+  } catch (err) {
+    console.error(err);
+    alert('❌ Error de conexión con el servidor.');
+  }
+};
+
+// === MENSAJE FINAL ===
+function mostrarMensajeFuegosArtificiales() {
+  if (!selectedNumbers || selectedNumbers.length === 0) {
+    alert("Error: no hay números seleccionados.");
+    return;
+  }
+
+  const mensaje = document.createElement('div');
+  mensaje.id = 'mensajeFuegos';
+  mensaje.innerHTML = `
+    <div style="position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.8); display:flex; justify-content:center; align-items:center; z-index:1001;">
+      <div style="background:white; padding:30px; border-radius:12px; text-align:center; color:#333; max-width:90%; box-shadow: 0 4px 20px rgba(0,0,0,0.2);">
+        <h2 style="color:#1976d2; margin:0 0 10px; font-size:24px;">🎉 ¡Estás participando! 🎉</h2>
+        <p style="margin:5px 0; font-size:16px;">¡Fin de semana de desconexión te espera!</p>
+        <p style="font-size:18px; font-weight:bold; margin:15px 0 5px;">Números con los que participas:</p>
+        <p style="font-size:22px; color:#1976d2; font-weight:bold; margin:5px 0 15px;">
+          ${selectedNumbers.map(num => `<span style="display:inline-block; background:#1976d2; color:white; padding:6px 12px; margin:0 5px; border-radius:6px; font-weight:bold;">${num}</span>`).join('')}
+        </p>
+        <p style="margin:0; font-size:14px; color:#666;">Gracias por tu participación.</p>
+        <button id="btnCerrarMensaje" style="margin-top:20px; padding:10px 20px; background:#e53935; color:white; border:none; border-radius:4px; cursor:pointer; font-size:16px;">Cerrar y volver al inicio</button>
+      </div>
+    </div>
+  `;
+  document.body.appendChild(mensaje);
+
+  confetti({ particleCount: 150, spread: 70, origin: { y: 0.6 } });
+
+  document.getElementById('btnCerrarMensaje').onclick = () => {
+    mensaje.remove();
+    moduloPagoCompleto.style.display = 'none';
+    carruselContainer.style.display = 'block';
+    btnIniciar.style.display = 'block';
+    resetSelection();
+    delete window.telefonoValidado;
+  };
+}
+
+// === ADMIN CON LOGIN ===
+let adminClickCount = 0;
+let adminResetTimer = null;
+
+document.addEventListener('click', function(e) {
+  const screenHeight = window.innerHeight;
+  if (e.clientY > screenHeight - 100) {
+    adminClickCount++;
+    
+    if (adminResetTimer) clearTimeout(adminResetTimer);
+    adminResetTimer = setTimeout(() => {
+      adminClickCount = 0;
+    }, 2000);
+
+    if (adminClickCount >= 5) {
+      adminClickCount = 0;
+      clearTimeout(adminResetTimer);
+      mostrarLoginAdmin();
+    }
+  }
+});
+
+function mostrarLoginAdmin() {
+  const modal = document.createElement('div');
+  modal.id = 'adminLoginModal';
+  modal.innerHTML = `
+    <div style="position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.8); display:flex; justify-content:center; align-items:center; z-index:10000;">
+      <div style="background:white; padding:25px; border-radius:10px; width:90%; max-width:400px; box-shadow:0 4px 20px rgba(0,0,0,0.3);">
+        <h3 style="margin-top:0; color:#1976d2;">🔒 Acceso al Panel Admin</h3>
+        <input type="password" id="adminPass" placeholder="<PASSWORD>" style="width:100%; padding:10px; margin:10px 0; border:1px solid #ccc; border-radius:4px; font-size:16px;" />
+        <div style="text-align:right; margin-top:15px;">
+          <button onclick="document.getElementById('adminLoginModal').remove()" style="padding:8px 15px; margin-right:10px; background:#9e9e9e; color:white; border:none; border-radius:4px;">Cancelar</button>
+          <button onclick="
+            const pass = document.getElementById('adminPass').value;
+            // ⚠️ Cambia 'admin123' por tu contraseña real
+            if (pass === 'admin123') {
+              document.getElementById('adminLoginModal').remove();
+              window.location.href = 'admin.html';
+            } else {
+              alert('❌ Contraseña incorrecta');
+              document.getElementById('adminPass').value = '';
+              document.getElementById('adminPass').focus();
+            }
+          " style="padding:8px 15px; background:#1976d2; color:white; border:none; border-radius:4px;">Ingresar</button>
+        </div>
+      </div>
+    </div>
+  `;
+  document.body.appendChild(modal);
+  document.getElementById('adminPass').focus();
+}
+
+window.addEventListener('load', actualizarCarrusel);
+</script>
+
+</body>
+
+</html>
+
+
+admin
+
+
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Panel de Administrador - Gana y Viaja</title>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      background-color: #f5f5f5;
+      margin: 0;
+      padding: 20px;
+    }
+
+    .container {
+      max-width: 1000px;
+      margin: 0 auto;
+      background: white;
+      padding: 20px;
+      border-radius: 10px;
+      box-shadow: 0 0 10px rgba(0,0,0,0.1);
+    }
+
+    h1 {
+      color: #1976d2;
+      text-align: center;
+    }
+
+    .search-box {
+      margin: 20px 0;
+      display: flex;
+      gap: 10px;
+    }
+
+    .search-box input {
+      flex: 1;
+      padding: 10px;
+      border: 1px solid #ccc;
+      border-radius: 4px;
+    }
+
+    .search-box button {
+      padding: 10px 20px;
+      background-color: #1976d2;
+      color: white;
+      border: none;
+      border-radius: 4px;
+      cursor: pointer;
+    }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      margin-top: 20px;
+    }
+
+    th, td {
+      padding: 10px;
+      text-align: left;
+      border: 1px solid #ddd;
+    }
+
+    th {
+      background-color: #e3f2fd;
+    }
+
+    .btn-validar {
+      padding: 5px 10px;
+      background-color: #4caf50;
+      color: white;
+      border: none;
+      border-radius: 4px;
+      cursor: pointer;
+    }
+
+    .btn-rechazar {
+      padding: 5px 10px;
+      background-color: #e53935;
+      color: white;
+      border: none;
+      border-radius: 4px;
+      cursor: pointer;
+    }
+
+    .ganador-popup {
+      display: none;
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      background: rgba(0,0,0,0.5);
+      z-index: 1000;
+      justify-content: center;
+      align-items: center;
+      display: flex;
+    }
+
+    .ganador-content {
+      background: white;
+      padding: 20px;
+      border-radius: 10px;
+      box-shadow: 0 4px 20px rgba(0,0,0,0.2);
+      max-width: 800px;
+      width: 90%;
+      text-align: center;
+    }
+
+    .ganador-content h2 {
+      color: #1976d2;
+    }
+
+    .descargar-btn {
+      margin-top: 20px;
+      padding: 10px 20px;
+      background-color: #1976d2;
+      color: white;
+      border: none;
+      border-radius: 4px;
+      cursor: pointer;
+    }
+
+    .email-sent {
+      color: green;
+      font-weight: bold;
+    }
+
+    /* Estilos para el estado */
+    .estado-pendiente {
+      color: orange;
+      font-weight: bold;
+    }
+
+    .estado-confirmado {
+      color: green;
+      font-weight: bold;
+    }
+
+    .estado-rechazado {
+      color: red;
+      font-weight: bold;
+    }
+  </style>
+</head>
+<body>
+
+<div class="container">
+  <h1>Panel de Administrador - Gana y Viaja</h1>
+
+  <div class="search-box">
+    <input type="text" id="searchInput" placeholder="Buscar por número, nombre o correo...">
+    <button id="searchBtn">Buscar</button>
+    <button id="findWinnerBtn">Encontrar Ganador</button>
+  </div>
+
+  <table id="participacionesTable">
+    <thead>
+      <tr>
+        <th>Nombre</th>
+        <th>Teléfono</th>
+        <th>Correo</th>
+        <th>Números</th>
+        <th>Fecha</th>
+        <th>Estado</th>
+        <th>Acciones</th>
+      </tr>
+    </thead>
+    <tbody>
+      <!-- Los datos se cargarán aquí -->
+    </tbody>
+  </table>
+</div>
+
+<!-- Popup de ganador -->
+<div class="ganador-popup" id="ganadorPopup" style="display:none;">
+  <div class="ganador-content">
+    <h2>🎉 ¡Feliz ganador! 🎉</h2>
+    <p><strong>Nombre:</strong> <span id="ganadorNombre">Nombre del ganador</span></p>
+    <p><strong>Número ganador:</strong> <span id="ganadorNumero">Número</span></p>
+    <p><strong>Sorteo N°:</strong> <span id="ganadorSorteo">47</span></p>
+    <p>¡Disfruta un fin de semana de relax con 3 acompañantes!</p>
+    <button class="descargar-btn" id="descargarBtn">Descargar Comprobante</button>
+    <div id="emailStatus" class="email-sent"></div>
+  </div>
+</div>
+
+<script>
+// === CONFIGURACIÓN ===
+// URL base de tu backend (ajusta si usas otro puerto o dominio)
+const API_BASE = 'https://viajaydisfruta.onrender.com';
+
+// === OBTENER PARTICIPACIONES DESDE SUPABASE (solo lectura) ===
+async function obtenerParticipacionesDesdeSupabase() {
+  const SUPABASE_URL = '';
+  const SUPABASE_ANON_KEY = '';
+  
+  try {
+    const response = await fetch(`${SUPABASE_URL}/rest/v1/participaciones?select=*`, {
+      headers: {
+        'apikey': SUPABASE_ANON_KEY,
+        'Authorization': `Bearer ${SUPABASE_ANON_KEY}`
+      }
+    });
+
+    if (response.ok) {
+      return await response.json();
+    } else {
+      console.error('Error al obtener participaciones:', await response.json());
+      return [];
+    }
+  } catch (error) {
+    console.error('Error de red:', error);
+    return [];
+  }
+}
+
+// === FUNCIONES ACTUALIZADAS PARA USAR EL BACKEND ===
+
+async function validarParticipacion(id) {
+  if (!confirm('¿Estás seguro de que deseas VALIDAR esta participación?')) return;
+
+  try {
+    const response = await fetch(`${API_BASE}/api/participacion/${id}/validar`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' }
+    });
+
+    const data = await response.json();
+
+    if (response.ok) {
+      alert(`✅ ${data.message}`);
+      const participaciones = await obtenerParticipacionesDesdeSupabase();
+      renderizarTabla(participaciones);
+    } else {
+      alert(`❌ Error: ${data.error}`);
+    }
+  } catch (error) {
+    console.error('Error al validar:', error);
+    alert('❌ Error de conexión con el servidor.');
+  }
+}
+
+async function rechazarParticipacion(id) {
+  if (!confirm('¿Estás seguro de que deseas RECHAZAR esta participación?')) return;
+
+  try {
+    const response = await fetch(`${API_BASE}/api/participacion/${id}/rechazar`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' }
+    });
+
+    const data = await response.json();
+
+    if (response.ok) {
+      alert(`✅ ${data.message}`);
+      const participaciones = await obtenerParticipacionesDesdeSupabase();
+      renderizarTabla(participaciones);
+    } else {
+      alert(`❌ Error: ${data.error}`);
+    }
+  } catch (error) {
+    console.error('Error al rechazar:', error);
+    alert('❌ Error de conexión con el servidor.');
+  }
+}
+
+// === RENDERIZAR TABLA ===
+function renderizarTabla(participaciones) {
+  const tbody = document.querySelector('#participacionesTable tbody');
+  tbody.innerHTML = '';
+
+  if (participaciones.length === 0) {
+    tbody.innerHTML = `<tr><td colspan="7" style="text-align:center;">No hay participaciones.</td></tr>`;
+    return;
+  }
+
+  participaciones.forEach(p => {
+    const tr = document.createElement('tr');
+    tr.innerHTML = `
+      <td>${p.nombre || ''}</td>
+      <td>${p.telefono || ''}</td>
+      <td>${p.correo || ''}</td>
+      <td>${Array.isArray(p.numeros) ? p.numeros.join(', ') : p.numeros || ''}</td>
+      <td>${p.fecha ? new Date(p.fecha).toLocaleString() : ''}</td>
+      <td><span class="estado-${p.estado}">${p.estado?.charAt(0).toUpperCase() + p.estado?.slice(1) || 'Desconocido'}</span></td>
+      <td>
+        ${
+          p.estado === 'pendiente'
+            ? `
+              <button class="btn-validar" onclick="validarParticipacion(${p.id})">Validar</button>
+              <button class="btn-rechazar" onclick="rechazarParticipacion(${p.id})">Rechazar</button>
+            `
+            : `<span class="estado-${p.estado}">${p.estado?.charAt(0).toUpperCase() + p.estado?.slice(1) || 'Desconocido'}</span>`
+        }
+      </td>
+    `;
+    tbody.appendChild(tr);
+  });
+}
+
+// === BÚSQUEDA Y GANADOR ===
+async function buscarParticipacion() {
+  const term = document.getElementById('searchInput').value.toLowerCase();
+  const todas = await obtenerParticipacionesDesdeSupabase();
+  const filtradas = todas.filter(p =>
+    (p.nombre?.toLowerCase().includes(term)) ||
+    (p.telefono?.includes(term)) ||
+    (p.correo?.toLowerCase().includes(term)) ||
+    (Array.isArray(p.numeros) ? p.numeros.some(n => n.includes(term)) : (p.numeros?.includes(term)))
+  );
+  renderizarTabla(filtradas);
+}
+
+async function encontrarGanador() {
+  const todas = await obtenerParticipacionesDesdeSupabase();
+  const confirmadas = todas.filter(p => p.estado === 'confirmado');
+  if (confirmadas.length === 0) {
+    alert('No hay participaciones confirmadas.');
+    return;
+  }
+  const ganador = confirmadas[Math.floor(Math.random() * confirmadas.length)];
+  const num = Array.isArray(ganador.numeros) 
+    ? ganador.numeros[Math.floor(Math.random() * ganador.numeros.length)] 
+    : ganador.numeros;
+  
+  document.getElementById('ganadorNombre').textContent = ganador.nombre || 'Desconocido';
+  document.getElementById('ganadorNumero').textContent = num || 'N/A';
+  document.getElementById('ganadorSorteo').textContent = '47';
+  document.getElementById('ganadorPopup').style.display = 'flex';
+  
+  setTimeout(() => {
+    document.getElementById('emailStatus').textContent = '✅ Correo enviado al ganador.';
+  }, 1000);
+}
+
+function descargarComprobante() {
+  alert('📄 Comprobante descargado (simulado).');
+}
+
+// === EVENTOS ===
+document.getElementById('searchBtn').addEventListener('click', buscarParticipacion);
+document.getElementById('findWinnerBtn').addEventListener('click', encontrarGanador);
+document.getElementById('descargarBtn').addEventListener('click', descargarComprobante);
+document.getElementById('ganadorPopup').addEventListener('click', function(e) {
+  if (e.target === this) {
+    this.style.display = 'none';
+    document.getElementById('emailStatus').textContent = '';
+  }
+});
+
+// === INICIALIZAR ===
+window.addEventListener('load', async () => {
+  const participaciones = await obtenerParticipacionesDesdeSupabase();
+  renderizarTabla(participaciones);
+});
+</script>
+
+</body>
+
+</html>

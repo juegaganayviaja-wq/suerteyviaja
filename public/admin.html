@@ -11,7 +11,6 @@
       margin: 0;
       padding: 20px;
     }
-
     .container {
       max-width: 1000px;
       margin: 0 auto;
@@ -20,25 +19,21 @@
       border-radius: 10px;
       box-shadow: 0 0 10px rgba(0,0,0,0.1);
     }
-
     h1 {
       color: #1976d2;
       text-align: center;
     }
-
     .search-box {
       margin: 20px 0;
       display: flex;
       gap: 10px;
     }
-
     .search-box input {
       flex: 1;
       padding: 10px;
       border: 1px solid #ccc;
       border-radius: 4px;
     }
-
     .search-box button {
       padding: 10px 20px;
       background-color: #1976d2;
@@ -47,23 +42,19 @@
       border-radius: 4px;
       cursor: pointer;
     }
-
     table {
       width: 100%;
       border-collapse: collapse;
       margin-top: 20px;
     }
-
     th, td {
       padding: 10px;
       text-align: left;
       border: 1px solid #ddd;
     }
-
     th {
       background-color: #e3f2fd;
     }
-
     .btn-validar {
       padding: 5px 10px;
       background-color: #4caf50;
@@ -72,7 +63,6 @@
       border-radius: 4px;
       cursor: pointer;
     }
-
     .btn-rechazar {
       padding: 5px 10px;
       background-color: #e53935;
@@ -81,7 +71,6 @@
       border-radius: 4px;
       cursor: pointer;
     }
-
     .ganador-popup {
       display: none;
       position: fixed;
@@ -95,7 +84,6 @@
       align-items: center;
       display: flex;
     }
-
     .ganador-content {
       background: white;
       padding: 20px;
@@ -105,11 +93,9 @@
       width: 90%;
       text-align: center;
     }
-
     .ganador-content h2 {
       color: #1976d2;
     }
-
     .descargar-btn {
       margin-top: 20px;
       padding: 10px 20px;
@@ -119,23 +105,18 @@
       border-radius: 4px;
       cursor: pointer;
     }
-
     .email-sent {
       color: green;
       font-weight: bold;
     }
-
-    /* Estilos para el estado */
     .estado-pendiente {
       color: orange;
       font-weight: bold;
     }
-
     .estado-confirmado {
       color: green;
       font-weight: bold;
     }
-
     .estado-rechazado {
       color: red;
       font-weight: bold;
@@ -143,16 +124,13 @@
   </style>
 </head>
 <body>
-
 <div class="container">
   <h1>Panel de Administrador - Gana y Viaja</h1>
-
   <div class="search-box">
     <input type="text" id="searchInput" placeholder="Buscar por número, nombre o correo...">
     <button id="searchBtn">Buscar</button>
     <button id="findWinnerBtn">Encontrar Ganador</button>
   </div>
-
   <table id="participacionesTable">
     <thead>
       <tr>
@@ -171,7 +149,6 @@
   </table>
 </div>
 
-<!-- Popup de ganador -->
 <div class="ganador-popup" id="ganadorPopup" style="display:none;">
   <div class="ganador-content">
     <h2>🎉 ¡Feliz ganador! 🎉</h2>
@@ -186,22 +163,12 @@
 
 <script>
 // === CONFIGURACIÓN ===
-// URL base de tu backend (ajusta si usas otro puerto o dominio)
 const API_BASE = 'https://viajaydisfruta.onrender.com';
 
-// === OBTENER PARTICIPACIONES DESDE SUPABASE (solo lectura) ===
-async function obtenerParticipacionesDesdeSupabase() {
-  const SUPABASE_URL = '';
-  const SUPABASE_ANON_KEY = '';
-  
+// === OBTENER PARTICIPACIONES DESDE TU BACKEND ===
+async function obtenerParticipacionesDesdeBackend() {
   try {
-    const response = await fetch(`${SUPABASE_URL}/rest/v1/participaciones?select=*`, {
-      headers: {
-        'apikey': SUPABASE_ANON_KEY,
-        'Authorization': `Bearer ${SUPABASE_ANON_KEY}`
-      }
-    });
-
+    const response = await fetch(`${API_BASE}/api/participaciones`);
     if (response.ok) {
       return await response.json();
     } else {
@@ -214,22 +181,18 @@ async function obtenerParticipacionesDesdeSupabase() {
   }
 }
 
-// === FUNCIONES ACTUALIZADAS PARA USAR EL BACKEND ===
-
+// === FUNCIONES ACTUALIZADAS ===
 async function validarParticipacion(id) {
   if (!confirm('¿Estás seguro de que deseas VALIDAR esta participación?')) return;
-
   try {
     const response = await fetch(`${API_BASE}/api/participacion/${id}/validar`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' }
     });
-
     const data = await response.json();
-
     if (response.ok) {
       alert(`✅ ${data.message}`);
-      const participaciones = await obtenerParticipacionesDesdeSupabase();
+      const participaciones = await obtenerParticipacionesDesdeBackend();
       renderizarTabla(participaciones);
     } else {
       alert(`❌ Error: ${data.error}`);
@@ -242,18 +205,15 @@ async function validarParticipacion(id) {
 
 async function rechazarParticipacion(id) {
   if (!confirm('¿Estás seguro de que deseas RECHAZAR esta participación?')) return;
-
   try {
     const response = await fetch(`${API_BASE}/api/participacion/${id}/rechazar`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' }
     });
-
     const data = await response.json();
-
     if (response.ok) {
       alert(`✅ ${data.message}`);
-      const participaciones = await obtenerParticipacionesDesdeSupabase();
+      const participaciones = await obtenerParticipacionesDesdeBackend();
       renderizarTabla(participaciones);
     } else {
       alert(`❌ Error: ${data.error}`);
@@ -264,16 +224,13 @@ async function rechazarParticipacion(id) {
   }
 }
 
-// === RENDERIZAR TABLA ===
 function renderizarTabla(participaciones) {
   const tbody = document.querySelector('#participacionesTable tbody');
   tbody.innerHTML = '';
-
   if (participaciones.length === 0) {
     tbody.innerHTML = `<tr><td colspan="7" style="text-align:center;">No hay participaciones.</td></tr>`;
     return;
   }
-
   participaciones.forEach(p => {
     const tr = document.createElement('tr');
     tr.innerHTML = `
@@ -298,10 +255,9 @@ function renderizarTabla(participaciones) {
   });
 }
 
-// === BÚSQUEDA Y GANADOR ===
 async function buscarParticipacion() {
   const term = document.getElementById('searchInput').value.toLowerCase();
-  const todas = await obtenerParticipacionesDesdeSupabase();
+  const todas = await obtenerParticipacionesDesdeBackend();
   const filtradas = todas.filter(p =>
     (p.nombre?.toLowerCase().includes(term)) ||
     (p.telefono?.includes(term)) ||
@@ -312,7 +268,7 @@ async function buscarParticipacion() {
 }
 
 async function encontrarGanador() {
-  const todas = await obtenerParticipacionesDesdeSupabase();
+  const todas = await obtenerParticipacionesDesdeBackend();
   const confirmadas = todas.filter(p => p.estado === 'confirmado');
   if (confirmadas.length === 0) {
     alert('No hay participaciones confirmadas.');
@@ -322,12 +278,10 @@ async function encontrarGanador() {
   const num = Array.isArray(ganador.numeros) 
     ? ganador.numeros[Math.floor(Math.random() * ganador.numeros.length)] 
     : ganador.numeros;
-  
   document.getElementById('ganadorNombre').textContent = ganador.nombre || 'Desconocido';
   document.getElementById('ganadorNumero').textContent = num || 'N/A';
   document.getElementById('ganadorSorteo').textContent = '47';
   document.getElementById('ganadorPopup').style.display = 'flex';
-  
   setTimeout(() => {
     document.getElementById('emailStatus').textContent = '✅ Correo enviado al ganador.';
   }, 1000);
@@ -350,11 +304,9 @@ document.getElementById('ganadorPopup').addEventListener('click', function(e) {
 
 // === INICIALIZAR ===
 window.addEventListener('load', async () => {
-  const participaciones = await obtenerParticipacionesDesdeSupabase();
+  const participaciones = await obtenerParticipacionesDesdeBackend();
   renderizarTabla(participaciones);
 });
 </script>
-
 </body>
-
 </html>
