@@ -9,7 +9,7 @@ const path = require('path');
 const app = express();
 const PORT = process.env.PORT || 3000;
 
-// === CORS: dominios SIN espacios ni barras ===
+// === CORS ===
 app.use(cors({
   origin: [
     'http://localhost:3000',
@@ -20,7 +20,7 @@ app.use(cors({
 
 app.use(express.json({ limit: '10mb' }));
 
-// === SERVE ARCHIVOS ESTÁTICOS (frontend) ===
+// === SERVE ARCHIVOS ESTÁTICOS ===
 app.use(express.static(path.join(__dirname, 'public')));
 
 // === SUPABASE ===
@@ -32,7 +32,7 @@ const supabase = createClient(
 // === RESEND ===
 const resend = new Resend(process.env.RESEND_API_KEY);
 
-// === RUTA RAÍZ: sirve index.html ===
+// === RUTA RAÍZ ===
 app.get('/', (req, res) => {
   res.sendFile(path.join(__dirname, 'public', 'index.html'));
 });
@@ -40,21 +40,6 @@ app.get('/', (req, res) => {
 // === RUTA DE SALUD ===
 app.get('/api/health', (req, res) => {
   res.json({ status: 'OK', message: 'Backend funcionando.' });
-});
-
-// === OBTENER TODAS LAS PARTICIPACIONES (para admin) ===
-app.get('/api/participaciones', async (req, res) => {
-  try {
-    const { data, error } = await supabase
-      .from('participaciones')
-      .select('*')
-      .order('timestamp', { ascending: false });
-    if (error) throw error;
-    res.json(data);
-  } catch (err) {
-    console.error('❌ Error al obtener participaciones:', err);
-    res.status(500).json({ error: 'Error al obtener participaciones.' });
-  }
 });
 
 // === OBTENER NÚMEROS OCUPADOS ===
@@ -106,27 +91,28 @@ app.post('/api/reservar', async (req, res) => {
   }
 
   try {
-    // Verificar números duplicados
-    const {  todas, error: errCheck } = await supabase
+    // 🔒 CORRECCIÓN DEFINITIVA: manejo seguro de la consulta
+    const { data: todas, error: errCheck } = await supabase
       .from('participaciones')
       .select('numeros');
-    if (errCheck) throw errCheck;
 
-    const ocupados = new Set(todas.flatMap(p => p.numeros || []));
+    if (errCheck) {
+      console.error('Error en consulta de participaciones:', errCheck);
+      throw errCheck;
+    }
+
+    // Si `data` no es un array, lo tratamos como vacío
+    const listaParticipaciones = Array.isArray(todas) ? todas : [];
+
+    const ocupados = new Set(
+      listaParticipaciones
+        .filter(p => p && Array.isArray(p.numeros))
+        .flatMap(p => p.numeros)
+    );
+
     const repetidos = numeros.filter(n => ocupados.has(n));
     if (repetidos.length > 0) {
       return res.status(409).json({ error: `Números ya usados: ${repetidos.join(', ')}` });
-    }
-
-    // Verificar referencia duplicada
-    const {  existente, error: refError } = await supabase
-      .from('participaciones')
-      .select('referencia')
-      .eq('referencia', referencia)
-      .single();
-
-    if (refError?.code !== 'PGRST116') { // PGRST116 = "no rows returned"
-      return res.status(409).json({ error: 'La referencia de pago ya ha sido utilizada.' });
     }
 
     // Guardar en Supabase
@@ -136,7 +122,7 @@ app.post('/api/reservar', async (req, res) => {
       .select();
     if (error) throw error;
 
-    // ✉️ Enviar correo de recepción
+    // Enviar correo
     await enviarCorreo(
       correo,
       '📄 Comprobante recibido - Pendiente de validación',
@@ -159,7 +145,7 @@ app.post('/api/reservar', async (req, res) => {
 app.post('/api/participacion/:id/validar', async (req, res) => {
   const { id } = req.params;
   try {
-    const {  participacion, error: fetchError } = await supabase
+    const { data: participacion, error: fetchError } = await supabase
       .from('participaciones')
       .select('*')
       .eq('id', id)
@@ -199,7 +185,7 @@ app.post('/api/participacion/:id/validar', async (req, res) => {
 app.post('/api/participacion/:id/rechazar', async (req, res) => {
   const { id } = req.params;
   try {
-    const {  participacion, error: fetchError } = await supabase
+    const { data: participacion, error: fetchError } = await supabase
       .from('participaciones')
       .select('*')
       .eq('id', id)
