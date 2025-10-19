@@ -1,6 +1,3 @@
-servidor
-
-
 // servidor.js
 require('dotenv').config();
 const express = require('express');
