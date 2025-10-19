@@ -1,6 +1,9 @@
 servidor
 
 
+servidor
+
+
 // servidor.js
 require('dotenv').config();
 const express = require('express');
@@ -1056,19 +1059,10 @@ admin
 // URL base de tu backend (ajusta si usas otro puerto o dominio)
 const API_BASE = 'https://viajaydisfruta.onrender.com';
 
-// === OBTENER PARTICIPACIONES DESDE SUPABASE (solo lectura) ===
-async function obtenerParticipacionesDesdeSupabase() {
-  const SUPABASE_URL = '';
-  const SUPABASE_ANON_KEY = '';
-  
+// === OBTENER PARTICIPACIONES DESDE TU BACKEND ===
+async function obtenerParticipacionesDesdeBackend() {
   try {
-    const response = await fetch(`${SUPABASE_URL}/rest/v1/participaciones?select=*`, {
-      headers: {
-        'apikey': SUPABASE_ANON_KEY,
-        'Authorization': `Bearer ${SUPABASE_ANON_KEY}`
-      }
-    });
-
+    const response = await fetch('https://viajaydisfruta.onrender.com/api/participaciones');
     if (response.ok) {
       return await response.json();
     } else {
@@ -1096,7 +1090,7 @@ async function validarParticipacion(id) {
 
     if (response.ok) {
       alert(`✅ ${data.message}`);
-      const participaciones = await obtenerParticipacionesDesdeSupabase();
+      const participaciones = await obtenerParticipacionesDesdeBackend();
       renderizarTabla(participaciones);
     } else {
       alert(`❌ Error: ${data.error}`);
@@ -1120,7 +1114,7 @@ async function rechazarParticipacion(id) {
 
     if (response.ok) {
       alert(`✅ ${data.message}`);
-      const participaciones = await obtenerParticipacionesDesdeSupabase();
+      const participaciones = await obtenerParticipacionesDesdeBackend();
       renderizarTabla(participaciones);
     } else {
       alert(`❌ Error: ${data.error}`);
@@ -1168,7 +1162,7 @@ function renderizarTabla(participaciones) {
 // === BÚSQUEDA Y GANADOR ===
 async function buscarParticipacion() {
   const term = document.getElementById('searchInput').value.toLowerCase();
-  const todas = await obtenerParticipacionesDesdeSupabase();
+  const todas = await obtenerParticipacionesDesdeBackend();
   const filtradas = todas.filter(p =>
     (p.nombre?.toLowerCase().includes(term)) ||
     (p.telefono?.includes(term)) ||
@@ -1179,7 +1173,7 @@ async function buscarParticipacion() {
 }
 
 async function encontrarGanador() {
-  const todas = await obtenerParticipacionesDesdeSupabase();
+  const todas = await obtenerParticipacionesDesdeBackend();
   const confirmadas = todas.filter(p => p.estado === 'confirmado');
   if (confirmadas.length === 0) {
     alert('No hay participaciones confirmadas.');
@@ -1217,7 +1211,7 @@ document.getElementById('ganadorPopup').addEventListener('click', function(e) {
 
 // === INICIALIZAR ===
 window.addEventListener('load', async () => {
-  const participaciones = await obtenerParticipacionesDesdeSupabase();
+  const participaciones = await obtenerParticipacionesDesdeBackend();
   renderizarTabla(participaciones);
 });
 </script>

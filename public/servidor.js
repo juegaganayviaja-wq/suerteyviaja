@@ -60,6 +60,7 @@ app.get('/api/ocupados', async (req, res) => {
         .filter(p => 
           p.estado === 'confirmado' || 
           (p.estado === 'pendiente' && p.timestamp > ahora - TREINTA_MINUTOS)
+          // ⚠️ Los rechazados NO se incluyen → se liberan inmediatamente
         )
         .flatMap(p => p.numeros || [])
     );
