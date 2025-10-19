@@ -1,3 +1,6 @@
+servidor
+
+
 // servidor.js
 require('dotenv').config();
 const express = require('express');
@@ -13,8 +16,8 @@ const PORT = process.env.PORT || 3000;
 app.use(cors({
   origin: [
     'http://localhost:3000',
-    'https://viajaydisfruta.onrender.com',
-    'https://suerteyviaja.netlify.app'
+    'https://viajaydisfruta.onrender.com',   // ✅ sin espacios
+    'https://suerteyviaja.netlify.app'       // ✅ sin espacios
   ]
 }));
 
@@ -42,22 +45,7 @@ app.get('/api/health', (req, res) => {
   res.json({ status: 'OK', message: 'Backend funcionando.' });
 });
 
-// === OBTENER TODAS LAS PARTICIPACIONES (para admin) ===
-app.get('/api/participaciones', async (req, res) => {
-  try {
-    const { data, error } = await supabase
-      .from('participaciones')
-      .select('*')
-      .order('timestamp', { ascending: false });
-    if (error) throw error;
-    res.json(data);
-  } catch (err) {
-    console.error('❌ Error al obtener participaciones:', err);
-    res.status(500).json({ error: 'Error al obtener participaciones.' });
-  }
-});
-
-// === OBTENER NÚMEROS OCUPADOS ===
+// // === OBTENER NÚMEROS OCUPADOS ===
 app.get('/api/ocupados', async (req, res) => {
   try {
     const { data, error } = await supabase
@@ -72,6 +60,7 @@ app.get('/api/ocupados', async (req, res) => {
         .filter(p => 
           p.estado === 'confirmado' || 
           (p.estado === 'pendiente' && p.timestamp > ahora - TREINTA_MINUTOS)
+          // ⚠️ Los rechazados NO se incluyen → se liberan inmediatamente
         )
         .flatMap(p => p.numeros || [])
     );
@@ -225,6 +214,21 @@ app.post('/api/participacion/:id/rechazar', async (req, res) => {
 app.use((err, req, res, next) => {
   console.error('Error no capturado:', err);
   res.status(500).json({ error: 'Error interno del servidor.' });
+});
+
+// === OBTENER TODAS LAS PARTICIPACIONES (para admin) ===
+app.get('/api/participaciones', async (req, res) => {
+  try {
+    const { data, error } = await supabase
+      .from('participaciones')
+      .select('*')
+      .order('timestamp', { ascending: false });
+    if (error) throw error;
+    res.json(data);
+  } catch (err) {
+    console.error('❌ Error al obtener participaciones:', err);
+    res.status(500).json({ error: 'Error al obtener participaciones.' });
+  }
 });
 
 // === INICIAR SERVIDOR ===
