@@ -1,3 +1,6 @@
+servidor
+
+
 // servidor.js
 require('dotenv').config();
 const express = require('express');
@@ -13,8 +16,8 @@ const PORT = process.env.PORT || 3000;
 app.use(cors({
   origin: [
     'http://localhost:3000',
-    'https://viajaydisfruta.onrender.com',
-    'https://suerteyviaja.netlify.app'
+    'https://viajaydisfruta.onrender.com',   // ✅ sin espacios
+    'https://suerteyviaja.netlify.app'       // ✅ sin espacios
   ]
 }));
 
@@ -40,21 +43,6 @@ app.get('/', (req, res) => {
 // === RUTA DE SALUD ===
 app.get('/api/health', (req, res) => {
   res.json({ status: 'OK', message: 'Backend funcionando.' });
-});
-
-// === OBTENER TODAS LAS PARTICIPACIONES (para admin) ===
-app.get('/api/participaciones', async (req, res) => {
-  try {
-    const { data, error } = await supabase
-      .from('participaciones')
-      .select('*')
-      .order('timestamp', { ascending: false });
-    if (error) throw error;
-    res.json(data);
-  } catch (err) {
-    console.error('❌ Error al obtener participaciones:', err);
-    res.status(500).json({ error: 'Error al obtener participaciones.' });
-  }
 });
 
 // === OBTENER NÚMEROS OCUPADOS ===
