@@ -88,19 +88,6 @@ async function enviarCorreo(to, subject, html) {
 }
 
 // === REGISTRAR PARTICIPACIÓN ===
-
-
-// Verificar referencia duplicada
-const { data: existente, error: refError } = await supabase
-  .from('participaciones')
-  .select('referencia')
-  .eq('referencia', referencia)
-  .single();
-
-if (refError?.code !== 'PGRST116') { // PGRST116 = "no rows returned"
-  return res.status(409).json({ error: 'La referencia de pago ya ha sido utilizada.' });
-}
-
 app.post('/api/reservar', async (req, res) => {
   const { nombre, telefono, correo, numeros, referencia, fecha, timestamp } = req.body;
   if (!nombre || !telefono || !correo || !referencia || !fecha || !timestamp || !Array.isArray(numeros) || numeros.length < 2) {
@@ -108,6 +95,7 @@ app.post('/api/reservar', async (req, res) => {
   }
 
   try {
+    // 1. Verificar números duplicados
     const { data: todas, error: errCheck } = await supabase
       .from('participaciones')
       .select('numeros');
@@ -119,12 +107,25 @@ app.post('/api/reservar', async (req, res) => {
       return res.status(409).json({ error: `Números ya usados: ${repetidos.join(', ')}` });
     }
 
+    // 🔒 2. VALIDAR REFERENCIA DUPLICADA (aquí va la validación)
+    const { data: existente, error: refError } = await supabase
+      .from('participaciones')
+      .select('referencia')
+      .eq('referencia', referencia)
+      .single();
+
+    if (refError?.code !== 'PGRST116') { // PGRST116 = "no rows returned"
+      return res.status(409).json({ error: 'La referencia de pago ya ha sido utilizada.' });
+    }
+
+    // 3. Insertar nueva participación
     const { data, error } = await supabase
       .from('participaciones')
       .insert([{ nombre, telefono, correo, numeros, referencia, fecha, estado: 'pendiente', timestamp }])
       .select();
     if (error) throw error;
 
+    // 4. Enviar correo y responder
     await enviarCorreo(
       correo,
       '📄 Comprobante recibido - Pendiente de validación',
@@ -143,45 +144,6 @@ app.post('/api/reservar', async (req, res) => {
   }
 });
 
-// === VALIDAR PARTICIPACIÓN ===
-app.post('/api/participacion/:id/validar', async (req, res) => {
-  const { id } = req.params;
-  try {
-    const { data: participacion, error: fetchError } = await supabase
-      .from('participaciones')
-      .select('*')
-      .eq('id', id)
-      .single();
-    if (fetchError || !participacion) {
-      return res.status(404).json({ error: 'Participación no encontrada.' });
-    }
-    if (participacion.estado === 'confirmado') {
-      return res.status(400).json({ error: 'Ya validada.' });
-    }
-
-    const { error: updateError } = await supabase
-      .from('participaciones')
-      .update({ estado: 'confirmado' })
-      .eq('id', id);
-    if (updateError) throw updateError;
-
-    await enviarCorreo(
-      participacion.correo,
-      '✅ ¡Tu participación ha sido validada!',
-      `<h2>✅ ¡Tu participación ha sido validada!</h2>
-       <p>Hola <strong>${participacion.nombre}</strong>,</p>
-       <p>Tus números están confirmados:</p>
-       <p><strong>Números:</strong> ${participacion.numeros.map(n => `<span style="background:#1976d2; color:white; padding:4px 8px; border-radius:4px; margin:2px;">${n}</span>`).join(' ')}</p>
-       <p>¡Mucha suerte en el sorteo!</p>
-       <p>Equipo de <strong>Gana y Viaja</strong></p>`
-    );
-
-    res.json({ success: true, message: 'Participación validada.' });
-  } catch (err) {
-    console.error('❌ Error al validar:', err);
-    res.status(500).json({ error: 'Error al validar la participación.' });
-  }
-});
 
 // === RECHAZAR PARTICIPACIÓN ===
 app.post('/api/participacion/:id/rechazar', async (req, res) => {
