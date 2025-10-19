@@ -11,6 +11,7 @@
       margin: 0;
       padding: 20px;
     }
+
     .container {
       max-width: 1000px;
       margin: 0 auto;
@@ -19,21 +20,25 @@
       border-radius: 10px;
       box-shadow: 0 0 10px rgba(0,0,0,0.1);
     }
+
     h1 {
       color: #1976d2;
       text-align: center;
     }
+
     .search-box {
       margin: 20px 0;
       display: flex;
       gap: 10px;
     }
+
     .search-box input {
       flex: 1;
       padding: 10px;
       border: 1px solid #ccc;
       border-radius: 4px;
     }
+
     .search-box button {
       padding: 10px 20px;
       background-color: #1976d2;
@@ -42,19 +47,23 @@
       border-radius: 4px;
       cursor: pointer;
     }
+
     table {
       width: 100%;
       border-collapse: collapse;
       margin-top: 20px;
     }
+
     th, td {
       padding: 10px;
       text-align: left;
       border: 1px solid #ddd;
     }
+
     th {
       background-color: #e3f2fd;
     }
+
     .btn-validar {
       padding: 5px 10px;
       background-color: #4caf50;
@@ -63,6 +72,7 @@
       border-radius: 4px;
       cursor: pointer;
     }
+
     .btn-rechazar {
       padding: 5px 10px;
       background-color: #e53935;
@@ -71,6 +81,7 @@
       border-radius: 4px;
       cursor: pointer;
     }
+
     .ganador-popup {
       display: none;
       position: fixed;
@@ -84,6 +95,7 @@
       align-items: center;
       display: flex;
     }
+
     .ganador-content {
       background: white;
       padding: 20px;
@@ -93,9 +105,11 @@
       width: 90%;
       text-align: center;
     }
+
     .ganador-content h2 {
       color: #1976d2;
     }
+
     .descargar-btn {
       margin-top: 20px;
       padding: 10px 20px;
@@ -105,23 +119,40 @@
       border-radius: 4px;
       cursor: pointer;
     }
+
     .email-sent {
       color: green;
       font-weight: bold;
     }
-    .estado-pendiente { color: orange; font-weight: bold; }
-    .estado-confirmado { color: green; font-weight: bold; }
-    .estado-rechazado { color: red; font-weight: bold; }
+
+    /* Estilos para el estado */
+    .estado-pendiente {
+      color: orange;
+      font-weight: bold;
+    }
+
+    .estado-confirmado {
+      color: green;
+      font-weight: bold;
+    }
+
+    .estado-rechazado {
+      color: red;
+      font-weight: bold;
+    }
   </style>
 </head>
 <body>
+
 <div class="container">
   <h1>Panel de Administrador - Gana y Viaja</h1>
+
   <div class="search-box">
     <input type="text" id="searchInput" placeholder="Buscar por número, nombre o correo...">
     <button id="searchBtn">Buscar</button>
     <button id="findWinnerBtn">Encontrar Ganador</button>
   </div>
+
   <table id="participacionesTable">
     <thead>
       <tr>
@@ -134,10 +165,13 @@
         <th>Acciones</th>
       </tr>
     </thead>
-    <tbody></tbody>
+    <tbody>
+      <!-- Los datos se cargarán aquí -->
+    </tbody>
   </table>
 </div>
 
+<!-- Popup de ganador -->
 <div class="ganador-popup" id="ganadorPopup" style="display:none;">
   <div class="ganador-content">
     <h2>🎉 ¡Feliz ganador! 🎉</h2>
@@ -152,12 +186,13 @@
 
 <script>
 // === CONFIGURACIÓN ===
+// URL base de tu backend (ajusta si usas otro puerto o dominio)
 const API_BASE = 'https://viajaydisfruta.onrender.com';
 
 // === OBTENER PARTICIPACIONES DESDE TU BACKEND ===
 async function obtenerParticipacionesDesdeBackend() {
   try {
-    const response = await fetch(`${API_BASE}/api/participaciones`);
+    const response = await fetch('https://viajaydisfruta.onrender.com/api/participaciones');
     if (response.ok) {
       return await response.json();
     } else {
@@ -170,44 +205,53 @@ async function obtenerParticipacionesDesdeBackend() {
   }
 }
 
-// === FUNCIONES DE ACCIÓN ===
+// === FUNCIONES ACTUALIZADAS PARA USAR EL BACKEND ===
+
 async function validarParticipacion(id) {
-  if (!confirm('¿Validar esta participación?')) return;
+  if (!confirm('¿Estás seguro de que deseas VALIDAR esta participación?')) return;
+
   try {
     const response = await fetch(`${API_BASE}/api/participacion/${id}/validar`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' }
     });
+
     const data = await response.json();
+
     if (response.ok) {
       alert(`✅ ${data.message}`);
-      const participaciones = await obtenerParticipacionesDesdeBackend();
+      const participaciones = await obtenerParticipacionesDesdeSupabase();
       renderizarTabla(participaciones);
     } else {
-      alert(`❌ ${data.error}`);
+      alert(`❌ Error: ${data.error}`);
     }
   } catch (error) {
-    alert('❌ Error de conexión.');
+    console.error('Error al validar:', error);
+    alert('❌ Error de conexión con el servidor.');
   }
 }
 
 async function rechazarParticipacion(id) {
-  if (!confirm('¿Rechazar esta participación?')) return;
+  if (!confirm('¿Estás seguro de que deseas RECHAZAR esta participación?')) return;
+
   try {
     const response = await fetch(`${API_BASE}/api/participacion/${id}/rechazar`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' }
     });
+
     const data = await response.json();
+
     if (response.ok) {
       alert(`✅ ${data.message}`);
-      const participaciones = await obtenerParticipacionesDesdeBackend();
+      const participaciones = await obtenerParticipacionesDesdeSupabase();
       renderizarTabla(participaciones);
     } else {
-      alert(`❌ ${data.error}`);
+      alert(`❌ Error: ${data.error}`);
     }
   } catch (error) {
-    alert('❌ Error de conexión.');
+    console.error('Error al rechazar:', error);
+    alert('❌ Error de conexión con el servidor.');
   }
 }
 
@@ -215,24 +259,30 @@ async function rechazarParticipacion(id) {
 function renderizarTabla(participaciones) {
   const tbody = document.querySelector('#participacionesTable tbody');
   tbody.innerHTML = '';
+
   if (participaciones.length === 0) {
     tbody.innerHTML = `<tr><td colspan="7" style="text-align:center;">No hay participaciones.</td></tr>`;
     return;
   }
+
   participaciones.forEach(p => {
     const tr = document.createElement('tr');
     tr.innerHTML = `
       <td>${p.nombre || ''}</td>
       <td>${p.telefono || ''}</td>
       <td>${p.correo || ''}</td>
-      <td>${Array.isArray(p.numeros) ? p.numeros.join(', ') : ''}</td>
+      <td>${Array.isArray(p.numeros) ? p.numeros.join(', ') : p.numeros || ''}</td>
       <td>${p.fecha ? new Date(p.fecha).toLocaleString() : ''}</td>
       <td><span class="estado-${p.estado}">${p.estado?.charAt(0).toUpperCase() + p.estado?.slice(1) || 'Desconocido'}</span></td>
       <td>
-        ${p.estado === 'pendiente' ? `
-          <button class="btn-validar" onclick="validarParticipacion(${p.id})">Validar</button>
-          <button class="btn-rechazar" onclick="rechazarParticipacion(${p.id})">Rechazar</button>
-        ` : `<span class="estado-${p.estado}">${p.estado?.charAt(0).toUpperCase() + p.estado?.slice(1)}</span>`}
+        ${
+          p.estado === 'pendiente'
+            ? `
+              <button class="btn-validar" onclick="validarParticipacion(${p.id})">Validar</button>
+              <button class="btn-rechazar" onclick="rechazarParticipacion(${p.id})">Rechazar</button>
+            `
+            : `<span class="estado-${p.estado}">${p.estado?.charAt(0).toUpperCase() + p.estado?.slice(1) || 'Desconocido'}</span>`
+        }
       </td>
     `;
     tbody.appendChild(tr);
@@ -242,18 +292,18 @@ function renderizarTabla(participaciones) {
 // === BÚSQUEDA Y GANADOR ===
 async function buscarParticipacion() {
   const term = document.getElementById('searchInput').value.toLowerCase();
-  const todas = await obtenerParticipacionesDesdeBackend();
+  const todas = await obtenerParticipacionesDesdeSupabase();
   const filtradas = todas.filter(p =>
     (p.nombre?.toLowerCase().includes(term)) ||
     (p.telefono?.includes(term)) ||
     (p.correo?.toLowerCase().includes(term)) ||
-    (Array.isArray(p.numeros) ? p.numeros.some(n => n.includes(term)) : false)
+    (Array.isArray(p.numeros) ? p.numeros.some(n => n.includes(term)) : (p.numeros?.includes(term)))
   );
   renderizarTabla(filtradas);
 }
 
 async function encontrarGanador() {
-  const todas = await obtenerParticipacionesDesdeBackend();
+  const todas = await obtenerParticipacionesDesdeSupabase();
   const confirmadas = todas.filter(p => p.estado === 'confirmado');
   if (confirmadas.length === 0) {
     alert('No hay participaciones confirmadas.');
@@ -263,19 +313,25 @@ async function encontrarGanador() {
   const num = Array.isArray(ganador.numeros) 
     ? ganador.numeros[Math.floor(Math.random() * ganador.numeros.length)] 
     : ganador.numeros;
+  
   document.getElementById('ganadorNombre').textContent = ganador.nombre || 'Desconocido';
   document.getElementById('ganadorNumero').textContent = num || 'N/A';
   document.getElementById('ganadorSorteo').textContent = '47';
   document.getElementById('ganadorPopup').style.display = 'flex';
+  
   setTimeout(() => {
     document.getElementById('emailStatus').textContent = '✅ Correo enviado al ganador.';
   }, 1000);
 }
 
+function descargarComprobante() {
+  alert('📄 Comprobante descargado (simulado).');
+}
+
 // === EVENTOS ===
 document.getElementById('searchBtn').addEventListener('click', buscarParticipacion);
 document.getElementById('findWinnerBtn').addEventListener('click', encontrarGanador);
-document.getElementById('descargarBtn').addEventListener('click', () => alert('📄 Comprobante descargado (simulado).'));
+document.getElementById('descargarBtn').addEventListener('click', descargarComprobante);
 document.getElementById('ganadorPopup').addEventListener('click', function(e) {
   if (e.target === this) {
     this.style.display = 'none';
@@ -285,9 +341,11 @@ document.getElementById('ganadorPopup').addEventListener('click', function(e) {
 
 // === INICIALIZAR ===
 window.addEventListener('load', async () => {
-  const participaciones = await obtenerParticipacionesDesdeBackend();
+  const participaciones = await obtenerParticipacionesDesdeSupabase();
   renderizarTabla(participaciones);
 });
 </script>
+
 </body>
+
 </html>
