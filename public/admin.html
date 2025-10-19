@@ -115,15 +115,6 @@
   </style>
 </head>
 <body>
-
-<!-- 🔒 Protección de acceso -->
-<script>
-if (!sessionStorage.getItem('adminToken')) {
-  alert('Acceso denegado. Inicia sesión primero.');
-  window.location.href = 'index.html';
-}
-</script>
-
 <div class="container">
   <h1>Panel de Administrador - Gana y Viaja</h1>
   <div class="search-box">
@@ -160,6 +151,7 @@ if (!sessionStorage.getItem('adminToken')) {
 </div>
 
 <script>
+// === CONFIGURACIÓN ===
 const API_BASE = 'https://viajaydisfruta.onrender.com';
 
 // === OBTENER PARTICIPACIONES DESDE TU BACKEND ===
