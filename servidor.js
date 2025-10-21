@@ -50,7 +50,7 @@ app.get('/api/ocupados', async (req, res) => {
       .select('numeros, estado, timestamp');
     if (error) throw error;
 
-    const TREINTA_MINUTOS = 30 * 60 * 1000;
+    const TREINTA_MINUTOS = 8 * 60 * 60 * 1000;
     const ahora = Date.now();
     const ocupados = new Set(
       data
