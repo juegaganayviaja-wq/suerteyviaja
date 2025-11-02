@@ -393,9 +393,9 @@ jugarAzarBtn.onclick = async () => {
   if (opcion) {
     await playRandom(2);
   } else {
-    let cantidad = prompt("¿Cuántos números? (3 a 5)", "3");
+    let cantidad = prompt("¿Cuántos números? (3 a 100)", "5");
     cantidad = parseInt(cantidad);
-    if (isNaN(cantidad) || cantidad < 3 || cantidad > 5) cantidad = 3;
+    if (isNaN(cantidad) || cantidad < 3 || cantidad > 100) cantidad = 5;
     await playRandom(cantidad);
   }
 };
