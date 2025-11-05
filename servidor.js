@@ -1,4 +1,4 @@
-/// servidor.js
+// servidor.js
 require('dotenv').config();
 const express = require('express');
 const cors = require('cors');
@@ -11,30 +11,25 @@ const PORT = process.env.PORT || 3000;
 
 // === CORS CONFIGURACIÓN SEGURA ===
 const allowedOrigins = [
-  'http://localhost:5500',    // para Live Server local
-  'http://localhost:3000',    // si usas otro servidor local
-  'https://viajaydisfruta.onrender.com', // tu sitio en Render
-  'https://juegayviaja.netlify.app'      // ✅ TU FRONTEND EN NETLIFY
+  'http://localhost:5500',
+  'http://localhost:3000',
+  'https://viajaydisfruta.onrender.com',
+  'https://juegayviaja.netlify.app'
 ];
 
 app.use(cors({
   origin: (origin, callback) => {
-    // Permitir solicitudes sin origen (como Postman o curl)
     if (!origin) return callback(null, true);
-    // Verificar si el origen está en la lista permitida
     if (allowedOrigins.includes(origin)) {
       callback(null, true);
     } else {
       callback(new Error(`Origen no permitido: ${origin}`));
     }
   },
-  credentials: true // importante para cookies/sesiones
+  credentials: true
 }));
 
 app.use(express.json({ limit: '10mb' }));
-
-// === SERVE ARCHIVOS ESTÁTICOS ===
-app.use(express.static(path.join(__dirname, 'public')));
 
 // === SUPABASE ===
 const supabase = createClient(
@@ -44,11 +39,6 @@ const supabase = createClient(
 
 // === RESEND ===
 const resend = new Resend(process.env.RESEND_API_KEY);
-
-// === RUTA RAÍZ ===
-app.get('/', (req, res) => {
-  res.sendFile(path.join(__dirname, 'public', 'index.html'));
-});
 
 // === RUTA DE SALUD ===
 app.get('/api/health', (req, res) => {
@@ -63,7 +53,7 @@ app.get('/api/ocupados', async (req, res) => {
       .select('numeros, estado, timestamp');
     if (error) throw error;
 
-    const TREINTA_MINUTOS = 8 * 60 * 60 * 1000;
+    const TREINTA_MINUTOS = 30 * 60 * 1000; // 30 minutos en milisegundos
     const ahora = Date.now();
     const ocupados = new Set(
       data
@@ -262,6 +252,14 @@ app.post('/api/admin/login', async (req, res) => {
   } else {
     res.status(401).json({ error: 'Contraseña incorrecta' });
   }
+});
+
+// === SERVE ARCHIVOS ESTÁTICOS (¡AL FINAL!) ===
+app.use(express.static(path.join(__dirname, 'public')));
+
+// === RUTA RAÍZ (opcional, ya cubierta por static) ===
+app.get('/', (req, res) => {
+  res.sendFile(path.join(__dirname, 'public', 'index.html'));
 });
 
 // === MANEJO DE ERRORES GLOBAL ===
