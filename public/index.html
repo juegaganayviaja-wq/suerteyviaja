@@ -550,25 +550,41 @@ function mostrarMensajeFuegosArtificiales() {
   const mensaje = document.createElement('div');
   mensaje.id = 'mensajeFuegos';
   mensaje.innerHTML = `
-    <div style="position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.8); display:flex; justify-content:center; align-items:center; z-index:1001;">
-      <div style="background:white; padding:30px; border-radius:12px; text-align:center; color:#333; max-width:90%; box-shadow: 0 4px 20px rgba(0,0,0,0.2);">
+    <div style="position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.8); display:flex; justify-content:center; align-items:center; z-index:1001; padding:20px; box-sizing:border-box;">
+      <div style="background:white; padding:25px; border-radius:12px; text-align:center; color:#333; max-width:95%; max-height:90vh; overflow:auto; box-shadow: 0 4px 20px rgba(0,0,0,0.2);">
         <h2 style="color:#1976d2; margin:0 0 10px; font-size:24px;">🎉 ¡Estás participando! 🎉</h2>
         <p style="margin:5px 0; font-size:16px;">¡Fin de semana de desconexión te espera!</p>
-        <p style="font-size:18px; font-weight:bold; margin:15px 0 5px;">Números con los que participas:</p>
-        <div style="display:flex; flex-wrap:wrap; justify-content:center; gap:8px; margin:5px 0 15px; padding:10px; background:#f5f9ff; border-radius:8px;">
-  ${selectedNumbers.map(num => 
-    `<span style="background:#1976d2; color:white; padding:6px 12px; border-radius:6px; font-weight:bold; min-width:60px; text-align:center;">${num}</span>`
-  ).join('')}
-</div>
+        
+        <p style="font-size:18px; font-weight:bold; margin:15px 0 10px;">Números con los que participas:</p>
+        
+        <div style="display:flex; flex-wrap:wrap; justify-content:center; gap:8px; 
+                    max-height:300px; overflow-y:auto; padding:10px; 
+                    background:#f5f9ff; border-radius:8px; margin:0 auto 20px; 
+                    width:90%; border:1px solid #e0e0e0;">
+          ${selectedNumbers.map(num => 
+            `<span style="background:#1976d2; color:white; padding:6px 12px; 
+                         border-radius:6px; font-weight:bold; min-width:60px; 
+                         text-align:center; font-size:14px;">${num}</span>`
+          ).join('')}
+        </div>
+
         <p style="margin:0; font-size:14px; color:#666;">Gracias por tu participación.</p>
-        <button id="btnCerrarMensaje" style="margin-top:20px; padding:10px 20px; background:#e53935; color:white; border:none; border-radius:4px; cursor:pointer; font-size:16px;">Cerrar y volver al inicio</button>
+        <button id="btnCerrarMensaje" style="margin-top:15px; padding:10px 20px; 
+                background:#e53935; color:white; border:none; border-radius:6px; 
+                cursor:pointer; font-size:16px; min-width:180px;">
+          Cerrar y volver al inicio
+        </button>
       </div>
     </div>
   `;
   document.body.appendChild(mensaje);
 
-  confetti({ particleCount: 150, spread: 70, origin: { y: 0.6 } });
+  // Animación de fuegos (solo si está disponible)
+  if (typeof confetti !== 'undefined') {
+    confetti({ particleCount: 150, spread: 70, origin: { y: 0.6 } });
+  }
 
+  // Manejar clic en "Cerrar"
   document.getElementById('btnCerrarMensaje').onclick = () => {
     mensaje.remove();
     moduloPagoCompleto.style.display = 'none';
