@@ -260,9 +260,15 @@ window.addEventListener('resize', actualizarCarrusel);
 
 // === OBTENER NÚMEROS OCUPADOS ===
 async function obtenerNumerosOcupados() {
-  // ⚠️ PRUEBA TEMPORAL: FORZAR NÚMEROS OCUPADOS
-  console.log('⚠️ Usando números ocupados fijos para prueba...');
-  return new Set(['0001', '0002', '0003']);
+  try {
+    const response = await fetch(`${API_URL}/api/ocupados?nocache=${Date.now()}`); // ⬅️ Forzar actualización
+    if (!response.ok) throw new Error('Error al obtener números ocupados');
+    const data = await response.json();
+    return new Set(data.numeros);
+  } catch (error) {
+    console.error('Error al obtener números ocupados:', error);
+    return new Set();
+  }
 }
 
 // === SELECCIÓN DE NÚMEROS ===
