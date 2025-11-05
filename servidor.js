@@ -71,7 +71,7 @@ app.get('/api/ocupados', async (req, res) => {
       return res.json({ numeros: [] });
     }
 
-    const TREINTA_MINUTOS = 30 * 60 * 1000; // 30 minutos
+    const TREINTA_MINUTOS = 12 * 60 * 60 * 1000; // 30 minutos
     const ahora = Date.now();
     const ocupados = new Set(
       data
