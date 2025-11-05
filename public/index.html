@@ -39,7 +39,10 @@
       max-height: 80vh; overflow-y: auto;
     }
     .grid-numeros {
-      display: grid; grid-template-columns: repeat(10, 1fr); gap: 4px; margin-top: 10px;
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(40px, 1fr));
+  gap: 4px;
+  margin-top: 10px;
     }
     .numero-celda {
       padding: 6px; text-align: center; border: 1px solid #ddd; border-radius: 4px;
@@ -389,7 +392,7 @@ btnIniciar.onclick = async () => {
 };
 
 jugarAzarBtn.onclick = async () => {
-  const opcion = confirm("¿Jugar con 2 números?\nAceptar = 2 números\nCancelar = elegir entre 3 y 5");
+  const opcion = confirm("¿Jugar con 2 números?\nAceptar = 2 números\nCancelar = elegir entre 3 y 100");
   if (opcion) {
     await playRandom(2);
   } else {
@@ -552,9 +555,11 @@ function mostrarMensajeFuegosArtificiales() {
         <h2 style="color:#1976d2; margin:0 0 10px; font-size:24px;">🎉 ¡Estás participando! 🎉</h2>
         <p style="margin:5px 0; font-size:16px;">¡Fin de semana de desconexión te espera!</p>
         <p style="font-size:18px; font-weight:bold; margin:15px 0 5px;">Números con los que participas:</p>
-        <p style="font-size:22px; color:#1976d2; font-weight:bold; margin:5px 0 15px;">
-          ${selectedNumbers.map(num => `<span style="display:inline-block; background:#1976d2; color:white; padding:6px 12px; margin:0 5px; border-radius:6px; font-weight:bold;">${num}</span>`).join('')}
-        </p>
+        <div style="display:flex; flex-wrap:wrap; justify-content:center; gap:8px; margin:5px 0 15px; padding:10px; background:#f5f9ff; border-radius:8px;">
+  ${selectedNumbers.map(num => 
+    `<span style="background:#1976d2; color:white; padding:6px 12px; border-radius:6px; font-weight:bold; min-width:60px; text-align:center;">${num}</span>`
+  ).join('')}
+</div>
         <p style="margin:0; font-size:14px; color:#666;">Gracias por tu participación.</p>
         <button id="btnCerrarMensaje" style="margin-top:20px; padding:10px 20px; background:#e53935; color:white; border:none; border-radius:4px; cursor:pointer; font-size:16px;">Cerrar y volver al inicio</button>
       </div>
