@@ -14,7 +14,7 @@ const allowedOrigins = [
   'http://localhost:3000',
   'http://localhost:5500', // para Live Server, etc.
   'https://viajaydisfruta.onrender.com',
-  'https://suerteyviaja.netlify.app'
+  'https://juegayviaja.netlify.app/'
   // Agrega aquí tu dominio de Netlify si cambia
 ];
 
