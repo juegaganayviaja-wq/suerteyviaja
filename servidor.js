@@ -1,4 +1,4 @@
-// servidor.js
+/// servidor.js
 require('dotenv').config();
 const express = require('express');
 const cors = require('cors');
@@ -9,13 +9,26 @@ const path = require('path');
 const app = express();
 const PORT = process.env.PORT || 3000;
 
-// === CORS: SIN espacios en las URLs ===
+// === CORS CONFIGURACIÓN SEGURA ===
+const allowedOrigins = [
+  'http://localhost:3000',
+  'http://localhost:5500', // para Live Server, etc.
+  'https://viajaydisfruta.onrender.com',
+  'https://suerteyviaja.netlify.app'
+  // Agrega aquí tu dominio de Netlify si cambia
+];
+
 app.use(cors({
-  origin: [
-    'http://localhost:3000',
-    'https://viajaydisfruta.onrender.com',
-    'https://suerteyviaja.netlify.app'
-  ]
+  origin: (origin, callback) => {
+    // Permitir solicitudes sin origin (como Postman, curl, o ciertos entornos móviles)
+    if (!origin) return callback(null, true);
+    if (allowedOrigins.includes(origin)) {
+      callback(null, true);
+    } else {
+      callback(new Error(`Origen no permitido: ${origin}`));
+    }
+  },
+  credentials: true
 }));
 
 app.use(express.json({ limit: '10mb' }));
