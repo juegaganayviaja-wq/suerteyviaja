@@ -53,6 +53,11 @@ app.get('/api/ocupados', async (req, res) => {
       .select('numeros, estado, timestamp');
     if (error) throw error;
 
+    // Verificar si data es null o undefined
+    if (!data) {
+      return res.json({ numeros: [] });
+    }
+
     const TREINTA_MINUTOS = 30 * 60 * 1000; // 30 minutos en milisegundos
     const ahora = Date.now();
     const ocupados = new Set(
