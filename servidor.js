@@ -11,24 +11,24 @@ const PORT = process.env.PORT || 3000;
 
 // === CORS CONFIGURACIÓN SEGURA ===
 const allowedOrigins = [
-  'http://localhost:3000',
-  'http://localhost:5500', // para Live Server, etc.
-  'https://viajaydisfruta.onrender.com',
-  'https://juegayviaja.netlify.app/'
-  // Agrega aquí tu dominio de Netlify si cambia
+  'http://localhost:5500',    // para Live Server local
+  'http://localhost:3000',    // si usas otro servidor local
+  'https://viajaydisfruta.onrender.com', // tu sitio en Render
+  'https://juegayviaja.netlify.app'      // ✅ TU FRONTEND EN NETLIFY
 ];
 
 app.use(cors({
   origin: (origin, callback) => {
-    // Permitir solicitudes sin origin (como Postman, curl, o ciertos entornos móviles)
+    // Permitir solicitudes sin origen (como Postman o curl)
     if (!origin) return callback(null, true);
+    // Verificar si el origen está en la lista permitida
     if (allowedOrigins.includes(origin)) {
       callback(null, true);
     } else {
       callback(new Error(`Origen no permitido: ${origin}`));
     }
   },
-  credentials: true
+  credentials: true // importante para cookies/sesiones
 }));
 
 app.use(express.json({ limit: '10mb' }));
