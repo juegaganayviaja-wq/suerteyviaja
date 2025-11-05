@@ -29,6 +29,18 @@ app.use(cors({
   credentials: true
 }));
 
+// === FORZAR ENCABEZADOS CORS (protección adicional) ===
+app.use((req, res, next) => {
+  const origin = req.headers.origin;
+  if (allowedOrigins.includes(origin)) {
+    res.setHeader('Access-Control-Allow-Origin', origin);
+  }
+  res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');
+  res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
+  res.setHeader('Access-Control-Allow-Credentials', 'true');
+  next();
+});
+
 app.use(express.json({ limit: '10mb' }));
 
 // === SUPABASE ===
@@ -40,12 +52,14 @@ const supabase = createClient(
 // === RESEND ===
 const resend = new Resend(process.env.RESEND_API_KEY);
 
-// === RUTA DE SALUD ===
+// === RUTAS DE API ===
+
+// Ruta de salud
 app.get('/api/health', (req, res) => {
   res.json({ status: 'OK', message: 'Backend funcionando.' });
 });
 
-// === OBTENER NÚMEROS OCUPADOS ===
+// Obtener números ocupados
 app.get('/api/ocupados', async (req, res) => {
   try {
     const { data, error } = await supabase
@@ -53,12 +67,11 @@ app.get('/api/ocupados', async (req, res) => {
       .select('numeros, estado, timestamp');
     if (error) throw error;
 
-    // Verificar si data es null o undefined
     if (!data) {
       return res.json({ numeros: [] });
     }
 
-    const TREINTA_MINUTOS = 30 * 60 * 1000; // 30 minutos en milisegundos
+    const TREINTA_MINUTOS = 30 * 60 * 1000; // 30 minutos
     const ahora = Date.now();
     const ocupados = new Set(
       data
@@ -75,7 +88,7 @@ app.get('/api/ocupados', async (req, res) => {
   }
 });
 
-// === FUNCIÓN PARA ENVIAR CORREO ===
+// Función para enviar correo
 async function enviarCorreo(to, subject, html) {
   try {
     await resend.emails.send({
@@ -91,7 +104,7 @@ async function enviarCorreo(to, subject, html) {
   }
 }
 
-// === REGISTRAR PARTICIPACIÓN ===
+// Registrar participación
 app.post('/api/reservar', async (req, res) => {
   const { nombre, telefono, correo, numeros, referencia, fecha, timestamp } = req.body;
   if (!nombre || !telefono || !correo || !referencia || !fecha || !timestamp || !Array.isArray(numeros) || numeros.length < 2) {
@@ -99,7 +112,6 @@ app.post('/api/reservar', async (req, res) => {
   }
 
   try {
-    // Verificar números duplicados
     const { data: todas, error: errCheck } = await supabase
       .from('participaciones')
       .select('numeros');
@@ -111,29 +123,22 @@ app.post('/api/reservar', async (req, res) => {
       return res.status(409).json({ error: `Números ya usados: ${repetidos.join(', ')}` });
     }
 
-    // Verificar referencia duplicada
     const { data: referencias, error: refError } = await supabase
       .from('participaciones')
       .select('referencia', { count: 'exact' })
       .eq('referencia', referencia);
 
-    if (refError) {
-      console.error('Error al verificar referencia:', refError);
-      throw refError;
-    }
-
+    if (refError) throw refError;
     if (referencias && referencias.length > 0) {
       return res.status(409).json({ error: 'La referencia de pago ya ha sido utilizada.' });
     }
 
-    // Insertar participación
     const { data, error } = await supabase
       .from('participaciones')
       .insert([{ nombre, telefono, correo, numeros, referencia, fecha, estado: 'pendiente', timestamp }])
       .select();
     if (error) throw error;
 
-    // Enviar correo
     await enviarCorreo(
       correo,
       '📄 Comprobante recibido - Pendiente de validación',
@@ -152,7 +157,7 @@ app.post('/api/reservar', async (req, res) => {
   }
 });
 
-// === VALIDAR PARTICIPACIÓN ===
+// Validar participación
 app.post('/api/participacion/:id/validar', async (req, res) => {
   const { id } = req.params;
   try {
@@ -192,7 +197,7 @@ app.post('/api/participacion/:id/validar', async (req, res) => {
   }
 });
 
-// === RECHAZAR PARTICIPACIÓN ===
+// Rechazar participación
 app.post('/api/participacion/:id/rechazar', async (req, res) => {
   const { id } = req.params;
   try {
@@ -232,7 +237,7 @@ app.post('/api/participacion/:id/rechazar', async (req, res) => {
   }
 });
 
-// === OBTENER TODAS LAS PARTICIPACIONES (para admin) ===
+// Obtener todas las participaciones (admin)
 app.get('/api/participaciones', async (req, res) => {
   try {
     const { data, error } = await supabase
@@ -247,7 +252,7 @@ app.get('/api/participaciones', async (req, res) => {
   }
 });
 
-// === LOGIN DE ADMINISTRADOR ===
+// Login de admin
 app.post('/api/admin/login', async (req, res) => {
   const { password } = req.body;
   const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || 'admin123';
@@ -262,18 +267,18 @@ app.post('/api/admin/login', async (req, res) => {
 // === SERVE ARCHIVOS ESTÁTICOS (¡AL FINAL!) ===
 app.use(express.static(path.join(__dirname, 'public')));
 
-// === RUTA RAÍZ (opcional, ya cubierta por static) ===
+// Ruta raíz (opcional)
 app.get('/', (req, res) => {
   res.sendFile(path.join(__dirname, 'public', 'index.html'));
 });
 
-// === MANEJO DE ERRORES GLOBAL ===
+// Manejo de errores global
 app.use((err, req, res, next) => {
   console.error('Error no capturado:', err);
   res.status(500).json({ error: 'Error interno del servidor.' });
 });
 
-// === INICIAR SERVIDOR ===
+// Iniciar servidor
 app.listen(PORT, '0.0.0.0', () => {
   console.log(`🚀 Backend corriendo en puerto ${PORT}`);
   console.log(`🔗 URL pública: https://viajaydisfruta.onrender.com`);
